@@ -20,6 +20,9 @@ aspect-correct on any screen ratio.
    module during install — you'll want it later).
 2. In Unity Hub: **New Project → Universal 3D (URP)** template. Name it
    `SuperSniper8D`. Open it.
+   - The UI is built on **uGUI**. It ships with most templates, but if you hit
+     `CS0234: 'UI' does not exist` errors, install it via *Window → Package
+     Manager → + → Install package by name…* → `com.unity.ugui`.
 3. Copy the `Assets/Scripts` folder from this repo into your project's
    `Assets/` folder (drag it into the Project window, or copy via file explorer
    while Unity is closed). Wait for scripts to compile — bottom-right spinner.
@@ -129,6 +132,12 @@ Assets/Scripts/
 
 ## Troubleshooting
 
+- **Errors like `CS0234: 'UI' does not exist in namespace 'UnityEngine'`, or
+  `Text`/`Image`/`Button`/`RawImage`/`EventTrigger` "could not be found"** →
+  the **uGUI package is missing**. Install it: *Window → Package Manager → +
+  (top-left) → Install package by name…* → enter `com.unity.ugui` → **Install**.
+  (Or add `"com.unity.ugui": "2.0.0"` to `Packages/manifest.json` and reopen.)
+  This is what puts Unity into Safe Mode on a fresh project that dropped uGUI.
 - **Errors mentioning `Input` or "InputSystem"** → *Edit → Project Settings →
   Player → Other Settings → Active Input Handling* → set to **Both** (or
   *Input Manager (Old)*). Restart the editor when prompted. (The scripts use the
