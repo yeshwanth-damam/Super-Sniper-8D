@@ -26,8 +26,12 @@ namespace SuperSniper8D
 
         Text _scoreText, _missionText, _timerText, _ammoText, _reloadText;
         GameObject _crosshair, _scopeRoot;
+        RectTransform _scopeSquare, _maskL, _maskR, _maskT, _maskB;
         RectTransform _letterTop, _letterBottom;
         Image _flash;
+        Vector2 _lastScreen;
+
+        GameObject _pausePanel;
 
         GameObject _dossier;
         Text _dossierTitle, _dossierName, _dossierIntel;
@@ -84,6 +88,7 @@ namespace SuperSniper8D
             BuildDossier();
             BuildResults();
             BuildFail();
+            BuildPause();
             if (Application.isMobilePlatform || Application.platform == RuntimePlatform.Android)
                 BuildMobileControls();
 
@@ -125,8 +130,9 @@ namespace SuperSniper8D
         }
 
         // A procedurally-drawn scope reticle. Circular clear centre, opaque
-        // surround, crosshair + mil-dots. Kept square and letter-masked so the
-        // circle stays round on any aspect ratio.
+        // surround, crosshair + mil-dots. The square circle sprite is sized to
+        // the screen's shorter side and four black masks fill the remainder, so
+        // the reticle stays round and fully masked on any aspect ratio.
         void BuildScopeOverlay()
         {
             _scopeRoot = new GameObject("ScopeOverlay");
@@ -134,32 +140,62 @@ namespace SuperSniper8D
             var root = _scopeRoot.AddComponent<RectTransform>();
             Stretch(root);
 
-            // Side masks so everything outside the round scope is black.
-            SideBar(root, true);
-            SideBar(root, false);
-
             var sq = new GameObject("ScopeCircle");
             sq.transform.SetParent(_scopeRoot.transform, false);
             var img = sq.AddComponent<Image>();
             img.sprite = MakeScopeSprite(512);
             img.color = Color.white;
-            var rt = img.rectTransform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(1080, 1080); // square in reference space (height)
+            img.raycastTarget = false;
+            _scopeSquare = img.rectTransform;
+            _scopeSquare.anchorMin = _scopeSquare.anchorMax = new Vector2(0.5f, 0.5f);
+            _scopeSquare.pivot = new Vector2(0.5f, 0.5f);
+
+            _maskL = Mask("LeftMask", new Vector2(0f, 0.5f));
+            _maskR = Mask("RightMask", new Vector2(1f, 0.5f));
+            _maskT = Mask("TopMask", new Vector2(0.5f, 1f));
+            _maskB = Mask("BottomMask", new Vector2(0.5f, 0f));
+
+            LayoutScope();
         }
 
-        void SideBar(RectTransform parent, bool left)
+        RectTransform Mask(string name, Vector2 anchor)
         {
-            var go = new GameObject(left ? "LeftMask" : "RightMask");
-            go.transform.SetParent(parent, false);
+            var go = new GameObject(name);
+            go.transform.SetParent(_scopeRoot.transform, false);
             var img = go.AddComponent<Image>();
             img.color = Color.black;
+            img.raycastTarget = false;
             var rt = img.rectTransform;
-            rt.anchorMin = new Vector2(left ? 0f : 1f, 0f);
-            rt.anchorMax = new Vector2(left ? 0f : 1f, 1f);
-            rt.pivot = new Vector2(left ? 0f : 1f, 0.5f);
-            rt.sizeDelta = new Vector2(600, 0);
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = anchor;
             rt.anchoredPosition = Vector2.zero;
+            return rt;
+        }
+
+        // Sizes the reticle + masks from the canvas' logical rect (scaler-aware).
+        void LayoutScope()
+        {
+            var canvasRT = _canvas.transform as RectTransform;
+            if (canvasRT == null || _scopeSquare == null) return;
+            float w = canvasRT.rect.width;
+            float h = canvasRT.rect.height;
+            float side = Mathf.Min(w, h);
+
+            _scopeSquare.sizeDelta = new Vector2(side, side);
+            float sx = Mathf.Max(0f, (w - side) * 0.5f);
+            float sy = Mathf.Max(0f, (h - side) * 0.5f);
+            _maskL.sizeDelta = new Vector2(sx, h);
+            _maskR.sizeDelta = new Vector2(sx, h);
+            _maskT.sizeDelta = new Vector2(w, sy);
+            _maskB.sizeDelta = new Vector2(w, sy);
+
+            _lastScreen = new Vector2(Screen.width, Screen.height);
+        }
+
+        void Update()
+        {
+            if (_lastScreen.x != Screen.width || _lastScreen.y != Screen.height)
+                LayoutScope();
         }
 
         Sprite MakeScopeSprite(int size)
@@ -259,6 +295,32 @@ namespace SuperSniper8D
             _failBody = Label("FBody", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -360), 34, Paper, _failPanel.transform);
             MakeButton("RETRY", _failPanel.transform, new Vector2(0, -520),
                 () => { if (GameManager.Instance != null) GameManager.Instance.RetryLevel(); });
+        }
+
+        void BuildPause()
+        {
+            _pausePanel = Panel("Pause", new Color(0.02f, 0.02f, 0.03f, 0.92f));
+            Label("PTitle", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -260), 60, Amber, _pausePanel.transform)
+                .text = "PAUSED";
+            MakeButton("RESUME", _pausePanel.transform, new Vector2(0, -420),
+                () => { if (GameManager.Instance != null) GameManager.Instance.TogglePause(); });
+            MakeButton("RESTART", _pausePanel.transform, new Vector2(0, -530),
+                () => { if (GameManager.Instance != null) GameManager.Instance.RestartCampaign(); });
+            MakeButton("QUIT", _pausePanel.transform, new Vector2(0, -640),
+                () => { if (GameManager.Instance != null) GameManager.Instance.QuitGame(); });
+            _pausePanel.SetActive(false);
+        }
+
+        public void ShowPause()
+        {
+            if (_pausePanel != null) _pausePanel.SetActive(true);
+            MouseLook.LockCursor(false);
+        }
+
+        public void HidePause()
+        {
+            if (_pausePanel != null) _pausePanel.SetActive(false);
+            MouseLook.LockCursor(true);
         }
 
         void BuildMobileControls()

@@ -112,15 +112,43 @@ namespace SuperSniper8D
             if (ui != null) ui.SetMission(cfg.missionName, TargetsEliminated, cfg.targetCount);
         }
 
+        bool _paused;
+
         void Update()
         {
+            if (Input.GetKeyDown(KeyCode.Escape)) TogglePause();
+            if (_paused) return;
             if (!MissionActive) return;
+
+            // Freeze the clock while the bullet cam runs the show.
+            if (BulletCam.Instance != null && BulletCam.Instance.IsPlaying) return;
 
             _timeRemaining -= Time.deltaTime;
             if (ui != null) ui.SetTimer(Mathf.Max(0f, _timeRemaining));
 
             if (_timeRemaining <= 0f)
                 FailMission();
+        }
+
+        /// <summary>Esc toggles a pause menu during an active mission.</summary>
+        public void TogglePause()
+        {
+            if (BulletCam.Instance != null && BulletCam.Instance.IsPlaying) return;
+            if (!_paused && !MissionActive) return; // nothing to pause on menus
+
+            _paused = !_paused;
+            Time.timeScale = _paused ? 0f : 1f;
+            if (ui != null) { if (_paused) ui.ShowPause(); else ui.HidePause(); }
+        }
+
+        public void QuitGame()
+        {
+            Time.timeScale = 1f;
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
         }
 
         /// <summary>Called by the weapon whenever the trigger is pulled.</summary>

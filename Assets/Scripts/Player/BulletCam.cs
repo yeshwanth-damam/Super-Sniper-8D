@@ -118,13 +118,22 @@ namespace SuperSniper8D
             var ui = GameManager.Instance != null ? GameManager.Instance.ui : null;
             if (ui != null) ui.SetLetterbox(true);
 
+            // Scale the fly-along to the shot distance so near and far kills
+            // both read well, and seat the camera before the first frame so it
+            // doesn't snap in from its previous position.
+            float dist = Vector3.Distance(origin, hitPoint);
+            float duration = Mathf.Clamp(dist / 90f, 1.2f, travelSeconds);
+            Vector3 startSide = Vector3.Cross(dir, Vector3.up).normalized;
+            _bulletCam.transform.position = origin - dir * 3.2f + startSide * 1.1f + Vector3.up * 0.5f;
+            _bulletCam.transform.rotation = Quaternion.LookRotation(origin - _bulletCam.transform.position);
+
             bool skippable = _hasPlayedOnce;
             float elapsed = 0f;
             float roll = 0f;
 
-            while (elapsed < travelSeconds)
+            while (elapsed < duration)
             {
-                float u = elapsed / travelSeconds;
+                float u = elapsed / duration;
                 Vector3 bulletPos = Vector3.Lerp(origin, hitPoint, u);
                 _bullet.position = bulletPos;
 

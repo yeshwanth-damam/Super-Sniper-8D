@@ -41,6 +41,7 @@ namespace SuperSniper8D
         AudioSource _heartbeat;
         Light _muzzleFlash;
         LineRenderer _tracer;
+        GameObject _rifle;
         float _targetFOV;
         float _breathHeldFor;
         bool _busy; // reloading or cycling the bolt
@@ -60,6 +61,7 @@ namespace SuperSniper8D
             _targetFOV = hipFOV;
             if (cam != null) cam.fieldOfView = hipFOV;
 
+            BuildRifle();
             BuildMuzzleFlash();
             BuildTracer();
         }
@@ -124,6 +126,9 @@ namespace SuperSniper8D
 
             // Finer aim while scoped.
             _look.sensitivityScale = IsScoped ? 0.28f : 1f;
+
+            // Looking down the scope — hide the rifle body so the view is clean.
+            if (_rifle != null) _rifle.SetActive(!IsScoped);
 
             if (_ui != null) _ui.SetScoped(IsScoped);
         }
@@ -236,11 +241,51 @@ namespace SuperSniper8D
 
         // --- Cosmetics ------------------------------------------------------
 
+        // A first-person bolt-action rifle assembled from primitives, held at
+        // the lower-right of view. No colliders (the centre-screen ray must
+        // ignore it). Hidden while scoped.
+        void BuildRifle()
+        {
+            _rifle = new GameObject("Rifle");
+            _rifle.transform.SetParent(transform, false);
+            _rifle.transform.localPosition = new Vector3(0.17f, -0.19f, 0.28f);
+            _rifle.transform.localRotation = Quaternion.Euler(0f, -3f, 0f);
+
+            Material metal = RifleMaterial(new Color(0.09f, 0.10f, 0.12f));
+            Material wood = RifleMaterial(new Color(0.20f, 0.13f, 0.07f));
+
+            RiflePart(PrimitiveType.Cube, new Vector3(0f, 0f, 0.05f), new Vector3(0.06f, 0.08f, 0.75f), Vector3.zero, metal);        // receiver
+            RiflePart(PrimitiveType.Cylinder, new Vector3(0f, 0.015f, 0.6f), new Vector3(0.03f, 0.32f, 0.03f), new Vector3(90f, 0, 0), metal); // barrel
+            RiflePart(PrimitiveType.Cylinder, new Vector3(0f, 0.09f, 0.1f), new Vector3(0.038f, 0.16f, 0.038f), new Vector3(90f, 0, 0), metal); // scope tube
+            RiflePart(PrimitiveType.Cube, new Vector3(0f, -0.03f, -0.42f), new Vector3(0.05f, 0.10f, 0.30f), new Vector3(6f, 0, 0), wood);  // stock
+            RiflePart(PrimitiveType.Cube, new Vector3(0f, -0.11f, 0.0f), new Vector3(0.04f, 0.13f, 0.09f), new Vector3(-10f, 0, 0), metal); // magazine
+        }
+
+        void RiflePart(PrimitiveType type, Vector3 localPos, Vector3 localScale, Vector3 euler, Material mat)
+        {
+            var part = GameObject.CreatePrimitive(type);
+            var col = part.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            part.transform.SetParent(_rifle.transform, false);
+            part.transform.localPosition = localPos;
+            part.transform.localScale = localScale;
+            part.transform.localRotation = Quaternion.Euler(euler);
+            var mr = part.GetComponent<MeshRenderer>();
+            if (mr != null) mr.sharedMaterial = mat;
+        }
+
+        static Material RifleMaterial(Color color)
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+            return new Material(shader) { color = color };
+        }
+
         void BuildMuzzleFlash()
         {
             var go = new GameObject("MuzzleFlash");
             go.transform.SetParent(transform, false);
-            go.transform.localPosition = new Vector3(0.15f, -0.15f, 0.6f);
+            go.transform.localPosition = new Vector3(0.17f, -0.17f, 0.78f);
             _muzzleFlash = go.AddComponent<Light>();
             _muzzleFlash.type = LightType.Point;
             _muzzleFlash.color = new Color(1f, 0.75f, 0.35f);

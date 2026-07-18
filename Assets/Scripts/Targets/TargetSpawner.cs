@@ -51,9 +51,34 @@ namespace SuperSniper8D
 
         Vector3 RandomStand()
         {
-            float x = Random.Range(-areaWidth * 0.5f, areaWidth * 0.5f);
-            float z = Random.Range(minDistance, maxDistance);
-            return transform.position + new Vector3(x, groundY, z);
+            // Retry until we find a spot not embedded in a building.
+            for (int attempt = 0; attempt < 30; attempt++)
+            {
+                float x = Random.Range(-areaWidth * 0.5f, areaWidth * 0.5f);
+                float z = Random.Range(minDistance, maxDistance);
+                Vector3 candidate = transform.position + new Vector3(x, groundY, z);
+                if (IsClear(candidate))
+                    return candidate;
+            }
+            // Fallback: dead centre of the lane, guaranteed clear.
+            return transform.position + new Vector3(0f, groundY, minDistance);
+        }
+
+        // True if no building/geometry occupies the dummy's torso volume.
+        // The ground plane sits at y=0 so a box lifted above it won't hit it.
+        bool IsClear(Vector3 basePos)
+        {
+            Vector3 center = basePos + new Vector3(0f, 1.1f, 0f);
+            Vector3 halfExtents = new Vector3(0.6f, 1.0f, 0.6f);
+            Collider[] hits = Physics.OverlapBox(center, halfExtents, Quaternion.identity);
+            foreach (var c in hits)
+            {
+                // Ignore the ground plane and anything belonging to a target.
+                if (c.GetComponentInParent<Target>() != null) continue;
+                if (c.gameObject.name == "Ground") continue;
+                return false;
+            }
+            return true;
         }
 
         GameObject BuildDummy(Vector3 basePos, bool moving, float moverSpeed)
@@ -95,8 +120,16 @@ namespace SuperSniper8D
             if (moving)
             {
                 var mover = root.AddComponent<TargetMover>();
-                Vector3 a = basePos + Vector3.left * 6f;
-                Vector3 b = basePos + Vector3.right * 6f;
+                // Shrink the patrol span until both ends are clear of geometry.
+                float span = 6f;
+                Vector3 a = basePos, b = basePos;
+                while (span >= 1.5f)
+                {
+                    a = basePos + Vector3.left * span;
+                    b = basePos + Vector3.right * span;
+                    if (IsClear(a) && IsClear(b)) break;
+                    span *= 0.5f;
+                }
                 mover.Configure(a, b, moverSpeed);
                 target.mover = mover;
             }

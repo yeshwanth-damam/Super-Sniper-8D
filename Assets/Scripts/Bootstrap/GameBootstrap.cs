@@ -27,6 +27,8 @@ namespace SuperSniper8D
 
         void Start()
         {
+            VerifyInputBackend();
+
             _concrete = Mat(new Color(0.12f, 0.13f, 0.15f));
             _building = Mat(new Color(0.08f, 0.09f, 0.12f));
 
@@ -140,6 +142,25 @@ namespace SuperSniper8D
                 b.transform.position = new Vector3(x, h * 0.5f, z);
                 b.transform.localScale = new Vector3(w, h, d);
                 Paint(b, _building);
+            }
+        }
+
+        // The scripts use the classic UnityEngine.Input API. If the project is
+        // set to "Input System (New)" only, those calls throw at runtime — so we
+        // probe once and print a clear, actionable message instead of a silent
+        // dead game.
+        void VerifyInputBackend()
+        {
+            try
+            {
+                Input.GetKeyDown(KeyCode.None);
+            }
+            catch (System.Exception)
+            {
+                Debug.LogError(
+                    "[SuperSniper8D] Legacy input is disabled, so nothing will respond. " +
+                    "Fix: Edit > Project Settings > Player > Other Settings > Active Input " +
+                    "Handling → set to 'Both' (or 'Input Manager (Old)'), then restart the editor.");
             }
         }
 
