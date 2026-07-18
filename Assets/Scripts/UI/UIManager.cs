@@ -30,6 +30,7 @@ namespace SuperSniper8D
         RectTransform _letterTop, _letterBottom;
         Image _flash;
         Vector2 _lastScreen;
+        RawImage _grain;
 
         GameObject _pausePanel;
 
@@ -81,6 +82,7 @@ namespace SuperSniper8D
             scaler.matchWidthOrHeight = 0.5f;
             canvasGo.AddComponent<GraphicRaycaster>();
 
+            BuildCinematic();   // filmic grade under everything else
             BuildScopeOverlay();
             BuildLetterbox();
             BuildHud();
@@ -127,6 +129,72 @@ namespace SuperSniper8D
             img.color = Amber;
             var rt = img.rectTransform;
             Center(rt, size);
+        }
+
+        // A pipeline-agnostic filmic grade drawn as screen-space overlays: a
+        // cool shadow tint, a soft radial vignette, and animated film grain.
+        // Delivers the design doc's near-black, framed look on URP or Built-in
+        // with no volume framework or package dependency.
+        void BuildCinematic()
+        {
+            var tint = new GameObject("Grade");
+            tint.transform.SetParent(_canvas.transform, false);
+            var timg = tint.AddComponent<Image>();
+            timg.color = new Color(0.10f, 0.14f, 0.20f, 0.06f);
+            timg.raycastTarget = false;
+            Stretch(timg.rectTransform);
+
+            var vig = new GameObject("Vignette");
+            vig.transform.SetParent(_canvas.transform, false);
+            var vimg = vig.AddComponent<Image>();
+            vimg.sprite = MakeVignetteSprite(256);
+            vimg.color = new Color(0f, 0f, 0f, 0.55f);
+            vimg.raycastTarget = false;
+            Stretch(vimg.rectTransform);
+
+            var grain = new GameObject("Grain");
+            grain.transform.SetParent(_canvas.transform, false);
+            _grain = grain.AddComponent<RawImage>();
+            _grain.texture = MakeNoiseTexture(256);
+            _grain.color = new Color(1f, 1f, 1f, 0.05f);
+            _grain.raycastTarget = false;
+            Stretch(_grain.rectTransform);
+        }
+
+        Sprite MakeVignetteSprite(int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var px = new Color32[size * size];
+            float c = (size - 1) * 0.5f;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) / (size * 0.5f);
+                    float a = Mathf.SmoothStep(0.55f, 1.15f, d);
+                    px[y * size + x] = new Color32(0, 0, 0, (byte)(Mathf.Clamp01(a) * 255f));
+                }
+            }
+            tex.SetPixels32(px);
+            tex.Apply();
+            tex.wrapMode = TextureWrapMode.Clamp;
+            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        Texture2D MakeNoiseTexture(int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var px = new Color32[size * size];
+            for (int i = 0; i < px.Length; i++)
+            {
+                byte v = (byte)Random.Range(0, 256);
+                px[i] = new Color32(v, v, v, 255);
+            }
+            tex.SetPixels32(px);
+            tex.Apply();
+            tex.wrapMode = TextureWrapMode.Repeat;
+            tex.filterMode = FilterMode.Point;
+            return tex;
         }
 
         // A procedurally-drawn scope reticle. Circular clear centre, opaque
@@ -196,6 +264,10 @@ namespace SuperSniper8D
         {
             if (_lastScreen.x != Screen.width || _lastScreen.y != Screen.height)
                 LayoutScope();
+
+            // Jitter the grain UVs so the noise shimmers like film.
+            if (_grain != null)
+                _grain.uvRect = new Rect(Random.value, Random.value, 1.5f, 1.5f);
         }
 
         Sprite MakeScopeSprite(int size)

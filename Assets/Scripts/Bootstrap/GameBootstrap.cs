@@ -70,7 +70,10 @@ namespace SuperSniper8D
             cam.farClipPlane = 1200f;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = skyColor;
+            cam.allowHDR = true;   // let emissive muzzle/tracer/round read bright
+            cam.allowMSAA = true;
             cam.tag = "MainCamera";
+            QualitySettings.antiAliasing = 4;
 
             go.AddComponent<AudioListener>();
             go.AddComponent<MouseLook>();
