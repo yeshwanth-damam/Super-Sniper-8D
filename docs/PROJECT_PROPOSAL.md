@@ -1,7 +1,8 @@
 # SUPER SNIPER 8D
-## Project Proposal — Premium Mobile Sniper Game with High-Fidelity ("4K-class") Graphics
+## Project Proposal — Premium Mobile 3D Sniper Game with 4K Graphics
+### Solo developer · Zero budget · Free software + AI tool support
 
-Version 1.0 · July 2026
+Version 1.1 · July 2026
 Companion documents: `SuperSniper8D_Design_Monetization.md` (design & economy), top-level `README.md` (build/run guide)
 
 ---
@@ -19,7 +20,9 @@ Companion documents: `SuperSniper8D_Design_Monetization.md` (design & economy), 
 - Procedural 3D positional audio (the "8D" hook), filmic post grade, pause/fail/results flow
 - Mobile touch controls; runs on URP or Built-in pipeline with zero external assets
 
-This proposal covers taking that verified foundation to a **market-ready Google Play release**: production art at high fidelity, expanded content, monetization implementation, backend services, soft launch, and live operations.
+This proposal covers taking that verified foundation to a **market-ready Google Play release**: full 3D production art with a true 4K (3840 × 2160) rendering and asset pipeline, expanded content, monetization implementation, free-tier services, soft launch, and live operations.
+
+**Delivery model (Section 8):** one solo developer, **zero budget** — every role covered by free/open-source software, CC0 assets, and AI tool support. The only cash outlay is the $25 Google Play account. The accepted trade is time: solo development stretches the phase plan 2–3×, gated by exit tests rather than a calendar.
 
 **One-line pitch:** *Quick sniper contracts that look, sound, and feel like a console game — no energy bars, no forced ads.*
 
@@ -66,18 +69,32 @@ This foundation de-risks the two most common failure modes of game projects: "th
 
 ---
 
-## 4. "4K Graphics" on Mobile — Honest Technical Strategy
+## 4. 3D + 4K — Technical Commitment
 
-"4K" in mobile marketing means **high-fidelity rendering**, not literal 3840×2160 output. Almost no phone has a 4K panel (flagships are 1080p–1440p), and rendering at native 4K would destroy battery and thermals for zero visible benefit. The correct engineering interpretation — and what we commit to — is:
+Two separate requirements, both committed to:
 
-### 4.1 Rendering pipeline (Unity 6, URP)
+- **3D (spatial structure):** the game is a true three-dimensional world — polygon meshes with volume and depth (characters, rifles, buildings, props), 3D physics, raycast ballistics, a perspective camera, and real-time 3D lighting. This is already true of the current build and only deepens as production art replaces primitives.
+- **4K (resolution, 3840 × 2160):** the renderer supports genuine 4K output — sharpness, clarity, and pixel density — wherever the display hardware allows it.
+
+### 4.1 How 4K is delivered
+
+| Layer | Commitment |
+|---|---|
+| **Native 4K rendering** | On 4K-capable displays — Sony Xperia 1 series (4K OLED phones), 4K tablets, Android TV boxes, and phone-to-monitor modes like Samsung DeX — the game renders at native 3840 × 2160 (quality tier permitting). Unity's `Screen.SetResolution(3840, 2160, ...)` path is kept working and tested. |
+| **4K asset pipeline** | Hero assets (rifle, hands, primary targets) authored with 4K (4096²) PBR texture sets; environments at 2K with 4K source masters, so nothing is upscaled from low-res sources. |
+| **4K capture** | All marketing material — screenshots, the bullet-cam trailer — captured at true 4K from the in-engine game. |
+| **Sub-4K displays** | Most phones have 1080p–1440p panels; there the game renders at native panel resolution (its physical maximum) with the same 4K-authored assets, so the pixel density delivered is the most the hardware can display. Dynamic resolution scaling protects frame rate on weaker devices. |
+
+This is the honest engineering framing: 4K is a property of the output display as much as the renderer. The game's renderer and assets are built to true 4K standard; each device then receives the highest fidelity its screen can physically show.
+
+### 4.2 Rendering pipeline (Unity 6, URP)
 - **URP with HDR** rendering and hardware MSAA where budget allows
 - **Full post-processing volume stack**: filmic tonemapping (ACES), bloom, color-grade LUTs per region, vignette, depth of field in scope view and kill cams, motion blur in bullet cams
 - **Dynamic resolution scaling**: render scale adapts per-device (flagships ~1.0 at native, mid-range 0.7–0.85 upscaled) to hold frame rate
 - **Target frame rates**: 60 fps on flagship/upper-mid devices, 30 fps floor on min-spec
 - **4K-resolution source textures** (2048–4096 texture sets) on hero assets — the rifle, hands, primary targets — so close-ups and kill cams genuinely read as "4K-class"
 
-### 4.2 Asset quality tiers
+### 4.3 Asset quality tiers
 | Tier | Assets | Budget |
 |---|---|---|
 | Hero (always on screen / kill cam) | Rifle, hands, scope, bullet | 20–60k tris, 4K PBR texture sets |
@@ -85,15 +102,16 @@ This foundation de-risks the two most common failure modes of game projects: "th
 | Environment | Buildings, props, vehicles | Aggressive LODs, texture atlases, GPU instancing |
 | Distant | Skyline, background city | Baked imposters / low-poly silhouettes in fog |
 
-### 4.3 Lighting & atmosphere
+### 4.4 Lighting & atmosphere
 - Baked global illumination + light probes for environments; one real-time directional (sun) with soft shadows
 - Volumetric-style fog (URP height fog + gradient sky) for the golden-hour/blue-hour signature look
 - Reflection probes for wet-street/neon scenes (Region 2: Neon District)
 
-### 4.4 Device support matrix
+### 4.5 Device support matrix
 | Class | Example | Experience |
 |---|---|---|
-| Flagship (Snapdragon 8-series, A16+) | Galaxy S23+, iPhone 15 | Native res, 60 fps, all post FX |
+| 4K-display (Xperia 1 series, 4K tablets/TV) | Xperia 1 V | Native 3840×2160 where thermals allow, 30–60 fps, all post FX |
+| Flagship (Snapdragon 8-series, A16+) | Galaxy S23+, iPhone 15 | Native panel res, 60 fps, all post FX |
 | Mid (Snapdragon 7-series, Dimensity 8000) | Redmi Note 13 Pro | 0.8 render scale, 60 fps, most FX |
 | Min-spec (4GB RAM, Adreno 610-class) | Redmi 9 class | 0.7 scale, 30 fps, reduced FX, no DoF |
 
@@ -125,26 +143,28 @@ v1 ships **client-authoritative with cloud save** — no custom game server need
 | Remote config / economy tuning | Unity Remote Config / Firebase RC | Own config service |
 | Analytics | Firebase Analytics + Unity Analytics | Data warehouse |
 | Leaderboards (async, not PvP) | Play Games leaderboards | Own service |
-| Receipt validation | Server-side validation via Play Developer API (small Spring Boot service on AWS) | Expanded backend |
+| Receipt validation | Client-side checks + free Play Integrity API (zero-budget; see 8.3) | Small Spring Boot service on AWS, added post-revenue |
 
-Given the owner's Java/Spring Boot/AWS background, the one custom backend piece in v1 — **IAP receipt validation + player-economy audit log** — is a deliberately small Spring Boot service (Elastic Beanstalk / ECS Fargate, PostgreSQL RDS). Everything else uses managed services to keep v1 ops near-zero.
+Everything in v1 uses free tiers of managed services, so launch ops cost is zero (Section 8). Given the owner's Java/Spring Boot/AWS background, the first post-revenue backend piece — **server-side IAP receipt validation + player-economy audit log** — is a deliberately small Spring Boot service added the month there is revenue to host it.
 
 ### 5.3 Data & save
 - Local JSON save (exists) becomes the offline cache; cloud save syncs on login/mission-complete with last-write-wins + version numbers
 - Economy balance lives in remote config so tuning requires no app update
 
 ### 5.4 Tooling & pipeline
-| Area | Tool |
+All tools below are free (the full zero-budget tool-by-role map is in Section 8.1):
+
+| Area | Tool (free) |
 |---|---|
-| Engine / language | Unity 6 LTS, C# |
-| IDE | Visual Studio / Rider |
+| Engine / language | Unity 6 LTS (Personal), C# |
+| IDE | Visual Studio Community / VS Code + AI coding assistants |
 | 3D modeling | Blender |
-| Characters/animation | Mixamo (early), custom rigs (later) |
-| Textures | Substance Painter (or Quixel Mixer, free) |
-| Audio | Reaper/Audacity + recorded foley; Steam Audio plugin for HRTF binaural |
+| Characters/animation | Mixamo (free rigs + animations), Blender retargeting |
+| Textures | Blender texture paint, Materialize, GIMP/Krita, Upscayl (AI 4K upscaling), PolyHaven/ambientCG (CC0) |
+| Audio | Audacity + freesound.org (CC0) + recorded foley; LMMS for music; Steam Audio plugin (free) for HRTF binaural |
 | Version control | GitHub (this repo) + Git LFS for binaries |
 | CI | GitHub Actions + GameCI (automated Android builds, PR checks) |
-| Crash reporting | Firebase Crashlytics |
+| Crash reporting | Firebase Crashlytics (free tier) |
 
 ---
 
@@ -197,8 +217,8 @@ Region 1 rebuilt with production art; rigged enemies with animation states; hero
 **Phase C — Content expansion.**
 Regions 2–4 to production quality; 40–60 contracts; 8–12 rifles; boss contracts; mission-type variety. *Exit: a new player plays 45+ minutes unprompted; day-1 retention in friends-and-family test > 35%.*
 
-**Phase D — Monetization + backend.**
-Unity IAP + Play Billing, receipt-validation service (Spring Boot/AWS), LevelPlay rewarded integration, season pass v1 (~30 items), cloud save, remote config, analytics events. *Exit: a stranger completes a purchase and an Intel Drop without confusion; economy dashboards live.*
+**Phase D — Monetization + services (all free-tier).**
+Unity IAP + Play Billing with Play Integrity checks, LevelPlay/AdMob rewarded integration, season pass v1 (~30 items), Play Games cloud save, Firebase remote config + analytics events. *Exit: a stranger completes a purchase and an Intel Drop without confusion; economy dashboards live.*
 
 **Phase E — Soft launch.**
 Closed → open testing on Play (1–2 mid-size markets, e.g. Philippines/Brazil convention), Crashlytics triage, economy tuning via remote config, store listing A/B tests. *Exit: crash-free sessions ≥ 99.5%, D1 ≥ 35%, D7 ≥ 12%, rewarded-ad engagement ≥ 25% of DAU.*
@@ -206,35 +226,61 @@ Closed → open testing on Play (1–2 mid-size markets, e.g. Philippines/Brazil
 **Phase F — Global launch + live ops.**
 Staged production rollout, launch trailer built from bullet-cam footage, seasonal cadence begins. *Ongoing: monthly content drops, seasonal passes.*
 
-**Indicative durations** (industry-typical, dependent on staffing below): Phase A ~1 month; B ~2–3 months; C ~3–4 months; D ~1.5–2 months; E ~1–2 months. Solo development stretches these roughly 2–3×; the existing codebase is what makes even the solo path viable.
+**Indicative durations** (industry-typical for a small team): Phase A ~1 month; B ~2–3 months; C ~3–4 months; D ~1.5–2 months; E ~1–2 months. **This project runs the solo path (Section 8), which stretches these roughly 2–3× — accepted up front.** The existing codebase and AI-assisted production are what make the solo path viable at all; the phase exit gates matter more than the calendar.
 
 ---
 
-## 8. Team & Budget Options
+## 8. Team & Budget — Solo Developer, Zero Budget
 
-### Option 1 — Solo developer (owner) + contractors
-| Role | Arrangement |
+**The chosen model:** one developer (the owner), no hired staff, no paid software, no paid assets. Every role is covered by the owner amplified by AI tools and free/open-source software. The trade is explicit and accepted: **the project costs time instead of money.** Solo development stretches the phase plan roughly 2–3× versus a team, and that is fine — the phase exit tests (Section 7) still gate progression, they just take longer to reach.
+
+### 8.1 Every role, covered free
+
+| Role | How it's covered at ₹0 |
 |---|---|
-| Programming (client + backend) | Owner (existing code, Java/Spring/AWS background) |
-| 3D environment art | Contract / asset-store hybrid |
-| Character art + animation | Mixamo + one contractor pass |
-| Audio | Licensed packs + one freelance sound designer pass |
-| **Indicative cost** | **₹3–8 lakh** (contract art/audio, devices, tools, store fees) |
+| Programming (client) | Owner + AI coding assistants (the existing 14-script codebase was built this way) |
+| Backend | Deferred/minimised: free tiers only (see 8.3) — owner's Java/AWS skills held in reserve for post-revenue |
+| 3D environment & prop art | Blender (free) + CC0 asset libraries: **PolyHaven** (textures/HDRIs/models), **Kenney.nl**, **ambientCG**, Sketchfab CC0/CC-BY, Unity Asset Store free section |
+| Characters & animation | **Mixamo** (free rigged characters + animation library); Blender for retargeting/fixes |
+| Texturing | Blender's built-in texture paint + **Materialize** (free PBR map generator) + GIMP/Krita |
+| Concept art, UI art, store graphics | AI image generation + Krita/GIMP cleanup |
+| 4K texture upscaling | **Upscayl** (free, open-source AI upscaler) to lift CC0 sources to 4K masters |
+| Audio (SFX) | **freesound.org** (CC0), recorded foley on a phone mic, Audacity (free) — layered on the existing procedural audio system |
+| Music | **LMMS** (free DAW) + CC0 loops; sparse-score design keeps the bar reachable |
+| Voice (dossier briefs, later) | Free-tier AI text-to-speech, used sparingly |
+| QA | Owner + Google Play closed-testing track (friends/community testers, free) + Firebase Crashlytics (free) |
+| Game design / economy | Already documented (design doc); tuned live via free remote config |
 
-### Option 2 — Small indie team (recommended for the 4K-class art bar)
-| Role | Count |
+### 8.2 The actual cash cost
+
+| Item | Cost |
 |---|---|
-| Unity developer | 1 (+ owner) |
-| 3D artist (environment + props) | 1–2 |
-| Character artist/animator | 1 |
-| UI/UX designer | 0.5 (contract) |
-| Sound designer | 0.5 (contract) |
-| QA | 0.5 (+ community testing) |
-| **Indicative cost** | **₹25–60 lakh** to global launch |
+| Google Play developer account | **$25 (~₹2,100), one-time — the only unavoidable cost** |
+| Unity Personal | ₹0 (free below the revenue threshold) |
+| Blender, GIMP/Krita, Audacity, LMMS, Materialize, Upscayl | ₹0 (open source) |
+| GitHub + GitHub Actions/GameCI CI builds | ₹0 (free tier) |
+| Firebase (Analytics, Crashlytics, Remote Config) | ₹0 (Spark free tier) |
+| Google Play Games Services (auth, cloud save, leaderboards, achievements) | ₹0 |
+| Test devices | ₹0 — the owner's own phone + Unity editor device simulator; borrow low-end devices for spot checks |
+| Apple developer account | Deferred until iOS (₹0 for v1) |
 
-Fixed costs either way: Google Play ($25 one-time), Apple ($99/yr when iOS ships), AWS for the receipt service (≈$30–80/mo at launch scale), Unity (free below revenue threshold), test devices (3–4 across tiers, ₹60–100k).
+**Total cash required to global launch on Android: ~₹2,100.**
 
-Note: the art bar is the budget driver. The code is largely paid for (it exists); "4K-class" visuals are where money goes.
+### 8.3 Zero-budget backend adjustment
+
+The earlier Spring Boot receipt-validation service on AWS is **deferred to post-revenue** (it costs money to host). At launch:
+
+- **IAP:** Unity IAP + Google Play Billing with client-side receipt checks plus the free **Play Integrity API** for tamper resistance. Good enough for a single-player economy; server-side validation is added the month revenue exists to pay for it.
+- **Cloud save / auth / leaderboards:** Google Play Games Services (free).
+- **Config / analytics / crashes:** Firebase Spark tier (free).
+
+Nothing in v1 requires a server the owner pays for.
+
+### 8.4 What zero budget genuinely constrains — said honestly
+
+- **Art ceiling:** CC0 + Mixamo + AI-assisted texturing can reach "impressively good indie," not "Wildlife Studios AAA." The design direction already compensates: heavy atmosphere (fog, golden hour, silhouettes), restraint, and letterboxed cinematics flatter free assets far more than bright flat daylight would. The Phase B exit test ("stranger mistakes a clip for a console game") stays — it just may take more iterations.
+- **Time:** phases stretch 2–3×. The mitigations are the existing codebase (the invention is done), AI acceleration on every asset and script, and the phase gates preventing wasted work.
+- **Marketing:** ₹0 UA means organic-only — which was already the strategy (ratings, shareable bullet-cam clips, premium word-of-mouth). Zero budget changes nothing here.
 
 ---
 
@@ -256,9 +302,10 @@ Note: the art bar is the budget driver. The code is largely paid for (it exists)
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Art quality misses the "console" bar | Medium | High | Phase B exit test is a hard gate; contract senior art help before expanding content |
+| Art quality misses the "console" bar | Medium | High | Phase B exit test is a hard gate; atmosphere-heavy art direction chosen to flatter free/CC0 assets; iterate rather than spend |
 | Thermal/perf on mid devices | Medium | High | Dynamic resolution + tier system from Phase A; profile on real min-spec early |
-| Solo bandwidth vs 4 other active projects | High | High | Explicit decision (per design doc): commit staffing Option 1 vs 2 before Phase B |
+| Solo bandwidth vs 4 other active projects | High | High | Accepted model: time-boxed weekly hours for this project; phase gates prevent half-done sprawl |
+| Solo burnout over a long schedule | Medium | High | Phase exits double as celebrate-and-pause points; scope is fixed (no PvP, no 180 weapons) so the end is visible |
 | Economy tuning wrong at launch | Medium | Medium | Remote config from day one; soft-launch gate on economy metrics |
 | UA cost (can't outspend Wildlife) | High | Medium | Strategy is organic: ratings, shareable bullet-cam clips, premium word-of-mouth |
 | Store policy churn (Data Safety, ads SDKs) | Low | Medium | Rewarded-only ads simplify compliance; annual policy review |
@@ -268,10 +315,12 @@ Note: the art bar is the budget driver. The code is largely paid for (it exists)
 
 ## 11. Why This Proposal Is Credible
 
-Most proposals in this genre begin with 6 months of engine work before anything is playable. This one begins with a **working game in the repository**: the loop is proven in code, the meta systems (economy, save, campaign, screens) hold together end-to-end, an external code review has already been absorbed, and the design/monetization thinking is documented. The remaining work is *production* — art, content, integration, and launch discipline — which is more predictable and more parallelizable than invention.
+Most proposals in this genre begin with 6 months of engine work before anything is playable. This one begins with a **working game in the repository**: the loop is proven in code, the meta systems (economy, save, campaign, screens) hold together end-to-end, an external code review has already been absorbed, and the design/monetization thinking is documented. The remaining work is *production* — art, content, integration, and launch discipline — which is more predictable than invention.
 
-**Recommended immediate next steps:**
-1. Decide staffing (Option 1 vs 2) — this sets the realistic art bar
-2. Phase A: authored-scene refactor + CI + device-tier system
-3. Commission/acquire the Region 1 art kit and one hero rifle to validate the Phase B bar early
+The zero-budget model is also already proven by this project's own history: the entire existing codebase was produced by the owner with AI tool support at zero cost. The same working method extends to art, audio, and content via the free/CC0/AI pipeline in Section 8.
+
+**Recommended immediate next steps (solo, zero-budget):**
+1. Pay the one cost: the $25 Google Play developer account (registration review takes time — start it now)
+2. Phase A: authored-scene refactor + GameCI pipeline + device-tier system (all free)
+3. Assemble the free art kit for Region 1: PolyHaven/ambientCG materials, Kenney/CC0 building blocks, one Mixamo character, one CC0 rifle model — and validate the Phase B "console clip" bar early with atmosphere and grading rather than asset spend
 4. Implement the Intel Drop + IAP service layer behind feature flags (code-ready before art lands)
