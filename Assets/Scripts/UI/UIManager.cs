@@ -1,0 +1,521 @@
+using System.Collections;
+using System.Text;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+
+namespace SuperSniper8D
+{
+    /// <summary>
+    /// Builds the entire interface in code — HUD, generated scope reticle,
+    /// letterbox bars, white-flash, the cinematic dossier brief, the results
+    /// screen and mobile touch buttons. No Canvas, prefab or font asset needs
+    /// to exist in the project; everything is created at runtime with the
+    /// premium "quiet" language from the design doc: near-black panels, hairline
+    /// borders and a single amber accent.
+    /// </summary>
+    public class UIManager : MonoBehaviour
+    {
+        // Design-doc palette.
+        static readonly Color Amber = new Color(0.93f, 0.70f, 0.24f);
+        static readonly Color Ink = new Color(0.04f, 0.05f, 0.06f);
+        static readonly Color Paper = new Color(0.86f, 0.86f, 0.84f);
+
+        Font _font;
+        Canvas _canvas;
+
+        Text _scoreText, _missionText, _timerText, _ammoText, _reloadText;
+        GameObject _crosshair, _scopeRoot;
+        RectTransform _letterTop, _letterBottom;
+        Image _flash;
+
+        GameObject _dossier;
+        Text _dossierTitle, _dossierName, _dossierIntel;
+
+        GameObject _resultsPanel, _failPanel;
+        Text _resultsBody, _failBody;
+
+        // Mobile input state (read by the weapon).
+        bool _fireQueued;
+        public bool MobileScopeOn { get; private set; }
+        public bool MobileBreathHeld { get; private set; }
+
+        public bool ConsumeFire()
+        {
+            if (!_fireQueued) return false;
+            _fireQueued = false;
+            return true;
+        }
+
+        void Awake()
+        {
+            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            Build();
+        }
+
+        // ------------------------------------------------------------------
+        //  Build
+        // ------------------------------------------------------------------
+
+        void Build()
+        {
+            // EventSystem for UI clicks/touches.
+            if (FindObjectOfType<EventSystem>() == null)
+            {
+                var es = new GameObject("EventSystem");
+                es.AddComponent<EventSystem>();
+                es.AddComponent<StandaloneInputModule>();
+            }
+
+            var canvasGo = new GameObject("HUD");
+            _canvas = canvasGo.AddComponent<Canvas>();
+            _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvasGo.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.matchWidthOrHeight = 0.5f;
+            canvasGo.AddComponent<GraphicRaycaster>();
+
+            BuildScopeOverlay();
+            BuildLetterbox();
+            BuildHud();
+            BuildFlash();
+            BuildDossier();
+            BuildResults();
+            BuildFail();
+            if (Application.isMobilePlatform || Application.platform == RuntimePlatform.Android)
+                BuildMobileControls();
+
+            HidePanels();
+            SetScoped(false);
+        }
+
+        void BuildHud()
+        {
+            _scoreText = Label("Score", TextAnchor.UpperRight, new Vector2(1, 1), new Vector2(-30, -24), 40, Amber);
+            _scoreText.text = "0";
+
+            _missionText = Label("Mission", TextAnchor.UpperLeft, new Vector2(0, 1), new Vector2(30, -24), 26, Paper);
+            _timerText = Label("Timer", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -24), 44, Paper);
+            _ammoText = Label("Ammo", TextAnchor.LowerRight, new Vector2(1, 0), new Vector2(-30, 28), 34, Paper);
+            _ammoText.text = "5 / 5";
+
+            _reloadText = Label("Reload", TextAnchor.LowerCenter, new Vector2(0.5f, 0), new Vector2(0, 120), 30, Amber);
+            _reloadText.text = "RELOADING";
+            _reloadText.gameObject.SetActive(false);
+
+            // Hip crosshair: a thin amber plus at centre.
+            _crosshair = new GameObject("Crosshair");
+            _crosshair.transform.SetParent(_canvas.transform, false);
+            var crt = _crosshair.AddComponent<RectTransform>();
+            Center(crt, new Vector2(28, 28));
+            Bar(_crosshair.transform, new Vector2(28, 2));
+            Bar(_crosshair.transform, new Vector2(2, 28));
+        }
+
+        void Bar(Transform parent, Vector2 size)
+        {
+            var go = new GameObject("Bar");
+            go.transform.SetParent(parent, false);
+            var img = go.AddComponent<Image>();
+            img.color = Amber;
+            var rt = img.rectTransform;
+            Center(rt, size);
+        }
+
+        // A procedurally-drawn scope reticle. Circular clear centre, opaque
+        // surround, crosshair + mil-dots. Kept square and letter-masked so the
+        // circle stays round on any aspect ratio.
+        void BuildScopeOverlay()
+        {
+            _scopeRoot = new GameObject("ScopeOverlay");
+            _scopeRoot.transform.SetParent(_canvas.transform, false);
+            var root = _scopeRoot.AddComponent<RectTransform>();
+            Stretch(root);
+
+            // Side masks so everything outside the round scope is black.
+            SideBar(root, true);
+            SideBar(root, false);
+
+            var sq = new GameObject("ScopeCircle");
+            sq.transform.SetParent(_scopeRoot.transform, false);
+            var img = sq.AddComponent<Image>();
+            img.sprite = MakeScopeSprite(512);
+            img.color = Color.white;
+            var rt = img.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(1080, 1080); // square in reference space (height)
+        }
+
+        void SideBar(RectTransform parent, bool left)
+        {
+            var go = new GameObject(left ? "LeftMask" : "RightMask");
+            go.transform.SetParent(parent, false);
+            var img = go.AddComponent<Image>();
+            img.color = Color.black;
+            var rt = img.rectTransform;
+            rt.anchorMin = new Vector2(left ? 0f : 1f, 0f);
+            rt.anchorMax = new Vector2(left ? 0f : 1f, 1f);
+            rt.pivot = new Vector2(left ? 0f : 1f, 0.5f);
+            rt.sizeDelta = new Vector2(600, 0);
+            rt.anchoredPosition = Vector2.zero;
+        }
+
+        Sprite MakeScopeSprite(int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var px = new Color32[size * size];
+            float c = (size - 1) * 0.5f;
+            float rClear = size * 0.46f;
+            float rRing = size * 0.47f;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
+                    Color32 col;
+                    if (d > rRing) col = new Color32(0, 0, 0, 255);               // outer black
+                    else if (d > rClear) col = new Color32(237, 179, 61, 255);    // amber ring
+                    else
+                    {
+                        // Clear centre with crosshair + mil-dots.
+                        bool line = Mathf.Abs(x - c) < 1.2f || Mathf.Abs(y - c) < 1.2f;
+                        bool dot = false;
+                        for (int m = 1; m <= 4; m++)
+                        {
+                            float off = m * (rClear / 6f);
+                            if ((Mathf.Abs(Mathf.Abs(x - c) - off) < 2f && Mathf.Abs(y - c) < 2f) ||
+                                (Mathf.Abs(Mathf.Abs(y - c) - off) < 2f && Mathf.Abs(x - c) < 2f))
+                                dot = true;
+                        }
+                        if (line || dot) col = new Color32(20, 20, 22, 220);
+                        else col = new Color32(0, 0, 0, 0);
+                    }
+                    px[y * size + x] = col;
+                }
+            }
+            tex.SetPixels32(px);
+            tex.Apply();
+            tex.wrapMode = TextureWrapMode.Clamp;
+            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        void BuildLetterbox()
+        {
+            _letterTop = LetterBar(true);
+            _letterBottom = LetterBar(false);
+        }
+
+        RectTransform LetterBar(bool top)
+        {
+            var go = new GameObject(top ? "LetterTop" : "LetterBottom");
+            go.transform.SetParent(_canvas.transform, false);
+            var img = go.AddComponent<Image>();
+            img.color = Color.black;
+            img.raycastTarget = false;
+            var rt = img.rectTransform;
+            rt.anchorMin = new Vector2(0, top ? 1 : 0);
+            rt.anchorMax = new Vector2(1, top ? 1 : 0);
+            rt.pivot = new Vector2(0.5f, top ? 1 : 0);
+            rt.sizeDelta = new Vector2(0, 0);
+            return rt;
+        }
+
+        void BuildFlash()
+        {
+            var go = new GameObject("Flash");
+            go.transform.SetParent(_canvas.transform, false);
+            _flash = go.AddComponent<Image>();
+            _flash.color = new Color(1, 1, 1, 0);
+            _flash.raycastTarget = false;
+            Stretch(_flash.rectTransform);
+        }
+
+        void BuildDossier()
+        {
+            _dossier = Panel("Dossier", new Color(0.02f, 0.02f, 0.03f, 0.97f));
+            _dossierTitle = Label("DTitle", TextAnchor.UpperLeft, new Vector2(0, 1), new Vector2(160, -180), 30, Amber, _dossier.transform);
+            _dossierName = Label("DName", TextAnchor.UpperLeft, new Vector2(0, 1), new Vector2(160, -230), 70, Paper, _dossier.transform);
+            _dossierIntel = Label("DIntel", TextAnchor.UpperLeft, new Vector2(0, 1), new Vector2(160, -330), 32, Paper, _dossier.transform);
+            _dossierIntel.rectTransform.sizeDelta = new Vector2(1200, 200);
+            _dossierIntel.horizontalOverflow = HorizontalWrapMode.Wrap;
+        }
+
+        void BuildResults()
+        {
+            _resultsPanel = Panel("Results", new Color(0.02f, 0.02f, 0.03f, 0.94f));
+            Label("RTitle", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -220), 60, Amber, _resultsPanel.transform)
+                .text = "MISSION COMPLETE";
+            _resultsBody = Label("RBody", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -340), 38, Paper, _resultsPanel.transform);
+            _resultsBody.rectTransform.sizeDelta = new Vector2(900, 400);
+        }
+
+        void BuildFail()
+        {
+            _failPanel = Panel("Fail", new Color(0.05f, 0.01f, 0.01f, 0.95f));
+            Label("FTitle", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -240), 60, new Color(0.85f, 0.2f, 0.15f), _failPanel.transform)
+                .text = "MISSION FAILED";
+            _failBody = Label("FBody", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -360), 34, Paper, _failPanel.transform);
+            MakeButton("RETRY", _failPanel.transform, new Vector2(0, -520),
+                () => { if (GameManager.Instance != null) GameManager.Instance.RetryLevel(); });
+        }
+
+        void BuildMobileControls()
+        {
+            MakeHoldButton("FIRE", new Vector2(-160, 160), new Vector2(1, 0),
+                onDown: () => _fireQueued = true, onUp: null);
+            MakeHoldButton("SCOPE", new Vector2(-160, 360), new Vector2(1, 0),
+                onDown: () => MobileScopeOn = !MobileScopeOn, onUp: null);
+            MakeHoldButton("HOLD", new Vector2(160, 160), new Vector2(0, 0),
+                onDown: () => MobileBreathHeld = true, onUp: () => MobileBreathHeld = false);
+        }
+
+        // ------------------------------------------------------------------
+        //  Public HUD API
+        // ------------------------------------------------------------------
+
+        public void SetScore(int score) { if (_scoreText) _scoreText.text = score.ToString("N0"); }
+
+        public void SetMission(string name, int eliminated, int total)
+        {
+            if (_missionText) _missionText.text = $"{name}\nTARGETS  {eliminated} / {total}";
+        }
+
+        public void SetTimer(float seconds)
+        {
+            if (!_timerText) return;
+            int s = Mathf.CeilToInt(seconds);
+            _timerText.text = $"{s / 60:00}:{s % 60:00}";
+            _timerText.color = s <= 10 ? new Color(0.85f, 0.2f, 0.15f) : Paper;
+        }
+
+        public void SetAmmo(int ammo, int clip) { if (_ammoText) _ammoText.text = $"{ammo} / {clip}"; }
+        public void ShowReloading(bool on) { if (_reloadText) _reloadText.gameObject.SetActive(on); }
+
+        public void SetScoped(bool scoped)
+        {
+            if (_scopeRoot) _scopeRoot.SetActive(scoped);
+            if (_crosshair) _crosshair.SetActive(!scoped);
+        }
+
+        public void SetLetterbox(bool on) => StartCoroutine(LerpLetterbox(on ? 140f : 0f));
+
+        IEnumerator LerpLetterbox(float target)
+        {
+            float start = _letterTop.sizeDelta.y;
+            float t = 0f;
+            while (t < 1f)
+            {
+                t += Time.unscaledDeltaTime * 4f;
+                float h = Mathf.Lerp(start, target, t);
+                _letterTop.sizeDelta = new Vector2(0, h);
+                _letterBottom.sizeDelta = new Vector2(0, h);
+                yield return null;
+            }
+            _letterTop.sizeDelta = new Vector2(0, target);
+            _letterBottom.sizeDelta = new Vector2(0, target);
+        }
+
+        public void FlashWhite() => StartCoroutine(FlashRoutine());
+
+        IEnumerator FlashRoutine()
+        {
+            _flash.color = new Color(1, 1, 1, 0.9f);
+            float t = 0f;
+            while (t < 1f)
+            {
+                t += Time.unscaledDeltaTime * 3f;
+                _flash.color = new Color(1, 1, 1, Mathf.Lerp(0.9f, 0f, t));
+                yield return null;
+            }
+            _flash.color = new Color(1, 1, 1, 0f);
+        }
+
+        // ------------------------------------------------------------------
+        //  Cinematic screens
+        // ------------------------------------------------------------------
+
+        public IEnumerator PlayDossier(int contractNo, string missionName, string intel)
+        {
+            HidePanels();
+            _dossier.SetActive(true);
+            _dossierTitle.text = $"CONTRACT #{contractNo:00}  //  CLASSIFIED";
+            _dossierName.text = missionName;
+            _dossierIntel.text = "";
+
+            // Typewriter reveal.
+            var sb = new StringBuilder();
+            foreach (char ch in intel)
+            {
+                sb.Append(ch);
+                _dossierIntel.text = sb.ToString();
+                yield return new WaitForSecondsRealtime(0.018f);
+            }
+
+            yield return new WaitForSecondsRealtime(1.6f);
+            _dossier.SetActive(false);
+        }
+
+        public IEnumerator ShowResults(int levelCleared, int score, float accuracy,
+            int headshots, float bestDistance, bool isFinalLevel)
+        {
+            SetLetterbox(true);
+            _resultsPanel.SetActive(true);
+
+            // Count the score up slowly.
+            int shown = 0;
+            int step = Mathf.Max(1, score / 40);
+            while (shown < score)
+            {
+                shown = Mathf.Min(score, shown + step);
+                _resultsBody.text = ResultsText(shown, accuracy, headshots, bestDistance, isFinalLevel);
+                yield return new WaitForSecondsRealtime(0.03f);
+            }
+            _resultsBody.text = ResultsText(score, accuracy, headshots, bestDistance, isFinalLevel);
+
+            // Clear any button left over from a previous level, then add ours.
+            foreach (Transform child in _resultsPanel.transform)
+                if (child.name.StartsWith("Btn_")) Destroy(child.gameObject);
+
+            MakeButton(isFinalLevel ? "PLAY AGAIN" : "CONTINUE", _resultsPanel.transform, new Vector2(0, -560),
+                () =>
+                {
+                    if (GameManager.Instance == null) return;
+                    if (isFinalLevel) GameManager.Instance.RestartCampaign();
+                    else { HidePanels(); SetLetterbox(false); }
+                });
+
+            if (isFinalLevel) MouseLook.LockCursor(false);
+        }
+
+        string ResultsText(int score, float accuracy, int headshots, float bestDistance, bool finalLevel)
+        {
+            string header = finalLevel ? "CAMPAIGN CLEARED\n\n" : "";
+            return $"{header}SCORE  {score:N0}\n\n" +
+                   $"ACCURACY  {accuracy * 100f:0}%\n" +
+                   $"HEADSHOTS  {headshots}\n" +
+                   $"BEST SHOT  {bestDistance:0} m";
+        }
+
+        public void ShowFailed(string mission)
+        {
+            _failPanel.SetActive(true);
+            _failBody.text = $"{mission}\nThe window closed.";
+            MouseLook.LockCursor(false);
+        }
+
+        public void HidePanels()
+        {
+            if (_dossier) _dossier.SetActive(false);
+            if (_resultsPanel) _resultsPanel.SetActive(false);
+            if (_failPanel) _failPanel.SetActive(false);
+            MouseLook.LockCursor(true);
+        }
+
+        // ------------------------------------------------------------------
+        //  Widget helpers
+        // ------------------------------------------------------------------
+
+        Text Label(string name, TextAnchor anchor, Vector2 anchorPoint, Vector2 pos,
+            int size, Color color, Transform parent = null)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent != null ? parent : _canvas.transform, false);
+            var txt = go.AddComponent<Text>();
+            txt.font = _font;
+            txt.fontSize = size;
+            txt.color = color;
+            txt.alignment = anchor;
+            txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            txt.verticalOverflow = VerticalWrapMode.Overflow;
+            var rt = txt.rectTransform;
+            rt.anchorMin = rt.anchorMax = anchorPoint;
+            rt.pivot = anchorPoint;
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(700, 120);
+            return txt;
+        }
+
+        GameObject Panel(string name, Color color)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(_canvas.transform, false);
+            var img = go.AddComponent<Image>();
+            img.color = color;
+            Stretch(img.rectTransform);
+            return go;
+        }
+
+        Button MakeButton(string label, Transform parent, Vector2 pos, UnityEngine.Events.UnityAction onClick)
+        {
+            var go = new GameObject("Btn_" + label);
+            go.transform.SetParent(parent, false);
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0.1f, 0.1f, 0.12f, 0.95f);
+            var rt = img.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(360, 90);
+
+            var outline = go.AddComponent<Outline>();
+            outline.effectColor = Amber;
+            outline.effectDistance = new Vector2(1, 1);
+
+            var btn = go.AddComponent<Button>();
+            btn.onClick.AddListener(onClick);
+
+            var t = Label("Label", TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), Vector2.zero, 34, Amber, go.transform);
+            Stretch(t.rectTransform);
+            t.raycastTarget = false;
+            return btn;
+        }
+
+        // A press-and-hold capable button for mobile controls.
+        void MakeHoldButton(string label, Vector2 pos, Vector2 anchor,
+            System.Action onDown, System.Action onUp)
+        {
+            var go = new GameObject("Touch_" + label);
+            go.transform.SetParent(_canvas.transform, false);
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0.1f, 0.1f, 0.12f, 0.6f);
+            var rt = img.rectTransform;
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(240, 240);
+
+            var t = Label("Label", TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), Vector2.zero, 34, Amber, go.transform);
+            Stretch(t.rectTransform);
+            t.raycastTarget = false;
+
+            var trigger = go.AddComponent<EventTrigger>();
+            if (onDown != null) AddTrigger(trigger, EventTriggerType.PointerDown, _ => onDown());
+            if (onUp != null) AddTrigger(trigger, EventTriggerType.PointerUp, _ => onUp());
+        }
+
+        void AddTrigger(EventTrigger trigger, EventTriggerType type, System.Action<BaseEventData> cb)
+        {
+            var entry = new EventTrigger.Entry { eventID = type };
+            entry.callback.AddListener(new UnityEngine.Events.UnityAction<BaseEventData>(cb));
+            trigger.triggers.Add(entry);
+        }
+
+        static void Stretch(RectTransform rt)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+
+        static void Center(RectTransform rt, Vector2 size)
+        {
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = size;
+        }
+    }
+}
