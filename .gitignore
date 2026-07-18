@@ -1,0 +1,24 @@
+# Unity generated folders (this repo ships only Assets/Scripts + docs).
+# When you drop these scripts into a real Unity project, these are ignored.
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+
+# Unity meta noise for non-tracked folders
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.tmp
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vs/
+.idea/
