@@ -43,6 +43,7 @@ namespace SuperSniper8D
         bool _deployPressed;
 
         GameObject _homePanel, _selectPanel;
+        GameObject _mobileRoot;
         readonly System.Collections.Generic.List<GameObject> _homeCards = new System.Collections.Generic.List<GameObject>();
         readonly System.Collections.Generic.List<GameObject> _selectCards = new System.Collections.Generic.List<GameObject>();
 
@@ -292,6 +293,10 @@ namespace SuperSniper8D
             // Jitter the grain UVs so the noise shimmers like film.
             if (_grain != null)
                 _grain.uvRect = new Rect(Random.value, Random.value, 1.5f, 1.5f);
+
+            // Keep the mobile touch buttons out of the way of full-screen menus.
+            if (_mobileRoot != null && _mobileRoot.activeSelf == MenusOpen)
+                _mobileRoot.SetActive(!MenusOpen);
         }
 
         Sprite MakeScopeSprite(int size)
@@ -636,6 +641,11 @@ namespace SuperSniper8D
 
         void BuildMobileControls()
         {
+            // A togglable root so the touch buttons can be hidden under menus.
+            _mobileRoot = new GameObject("MobileControls");
+            _mobileRoot.transform.SetParent(_canvas.transform, false);
+            Stretch(_mobileRoot.AddComponent<RectTransform>());
+
             MakeHoldButton("FIRE", new Vector2(-160, 160), new Vector2(1, 0),
                 onDown: () => _fireQueued = true, onUp: null);
             MakeHoldButton("SCOPE", new Vector2(-160, 360), new Vector2(1, 0),
@@ -717,17 +727,34 @@ namespace SuperSniper8D
             _dossierName.text = missionName;
             _dossierIntel.text = "";
 
-            // Typewriter reveal.
+            // Typewriter reveal — skippable: the first skip completes the text,
+            // the next dismisses the brief.
             var sb = new StringBuilder();
+            bool skipped = false;
             foreach (char ch in intel)
             {
+                if (SkipPressed()) { skipped = true; break; }
                 sb.Append(ch);
                 _dossierIntel.text = sb.ToString();
                 yield return new WaitForSecondsRealtime(0.018f);
             }
+            _dossierIntel.text = intel; // ensure full text if skipped mid-reveal
 
-            yield return new WaitForSecondsRealtime(1.6f);
+            // Hold, but let the player click/tap/Space through it.
+            if (skipped) yield return null; // release the same press before re-reading
+            float hold = 1.6f;
+            while (hold > 0f && !SkipPressed())
+            {
+                hold -= Time.unscaledDeltaTime;
+                yield return null;
+            }
             _dossier.SetActive(false);
+        }
+
+        static bool SkipPressed()
+        {
+            return Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space)
+                   || (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began);
         }
 
         public IEnumerator ShowResults(int contractNo, int score, float accuracy,
@@ -852,7 +879,7 @@ namespace SuperSniper8D
             System.Action onDown, System.Action onUp)
         {
             var go = new GameObject("Touch_" + label);
-            go.transform.SetParent(_canvas.transform, false);
+            go.transform.SetParent(_mobileRoot != null ? _mobileRoot.transform : _canvas.transform, false);
             var img = go.AddComponent<Image>();
             img.color = new Color(0.1f, 0.1f, 0.12f, 0.6f);
             var rt = img.rectTransform;

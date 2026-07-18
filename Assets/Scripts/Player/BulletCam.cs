@@ -4,8 +4,8 @@ using UnityEngine;
 namespace SuperSniper8D
 {
     /// <summary>
-    /// The signature moment. On the final kill of a mission — or any headshot
-    /// past 200 m — time collapses, a dedicated camera detaches and chases the
+    /// The signature moment. On the final kill of a mission — or a long-range
+    /// headshot (<see cref="longShotThreshold"/>) — time collapses, a dedicated camera detaches and chases the
     /// round along its path with a slow roll, the soundscape drops to a whoosh
     /// and a heartbeat, impact lands on a single white frame, and sound crashes
     /// back in. Three to four seconds, skippable after the first viewing.
@@ -20,7 +20,7 @@ namespace SuperSniper8D
         [Header("Timing")]
         public float slowMoScale = 0.15f;
         public float travelSeconds = 2.6f;   // real-time length of the fly-along
-        public float longShotThreshold = 200f;
+        public float longShotThreshold = 75f;  // targets in this arena top out ~96m
 
         public bool IsPlaying { get; private set; }
 

@@ -39,6 +39,7 @@ namespace SuperSniper8D
         MouseLook _look;
         UIManager _ui;
         AudioSource _heartbeat;
+        AudioLowPassFilter _lowPass;
         Light _muzzleFlash;
         LineRenderer _tracer;
         GameObject _rifle;
@@ -78,6 +79,12 @@ namespace SuperSniper8D
             BuildRifle();
             BuildMuzzleFlash();
             BuildTracer();
+
+            // Low-pass filter on the listener's GameObject muffles the whole
+            // world when scoped (breath held, tunnel-vision focus).
+            _lowPass = gameObject.GetComponent<AudioLowPassFilter>();
+            if (_lowPass == null) _lowPass = gameObject.AddComponent<AudioLowPassFilter>();
+            _lowPass.cutoffFrequency = 22000f; // open = no audible filtering
         }
 
         void Start()
@@ -146,6 +153,13 @@ namespace SuperSniper8D
             // Looking down the scope — hide the rifle body so the view is clean.
             if (_rifle != null) _rifle.SetActive(!IsScoped);
 
+            // Muffle the outside world while scoped.
+            if (_lowPass != null)
+            {
+                float target = IsScoped ? 1100f : 22000f;
+                _lowPass.cutoffFrequency = Mathf.Lerp(_lowPass.cutoffFrequency, target, Time.deltaTime * 8f);
+            }
+
             if (_ui != null) _ui.SetScoped(IsScoped);
         }
 
@@ -172,14 +186,22 @@ namespace SuperSniper8D
                     _look.swayAmount = baseSway * (1f + overshoot * 2f);
                 }
                 if (_heartbeat != null)
+                {
                     _heartbeat.volume = Mathf.Lerp(_heartbeat.volume, 0.6f, Time.deltaTime * 3f);
+                    // Tempo climbs ~55 -> ~90 BPM the longer breath is held.
+                    float f = Mathf.Clamp01(_breathHeldFor / breathHoldMax);
+                    _heartbeat.pitch = Mathf.Lerp(0.9f, 1.5f, f);
+                }
             }
             else
             {
                 _breathHeldFor = Mathf.Max(0f, _breathHeldFor - Time.deltaTime * 2f);
                 _look.swayAmount = baseSway;
                 if (_heartbeat != null)
+                {
                     _heartbeat.volume = Mathf.Lerp(_heartbeat.volume, IsScoped ? 0.12f : 0f, Time.deltaTime * 3f);
+                    _heartbeat.pitch = Mathf.Lerp(_heartbeat.pitch, 0.9f, Time.deltaTime * 3f);
+                }
             }
         }
 

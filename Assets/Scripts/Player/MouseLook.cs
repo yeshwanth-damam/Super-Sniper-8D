@@ -42,6 +42,11 @@ namespace SuperSniper8D
 
         void Update()
         {
+            // Freeze the view entirely while a menu is up, paused, or the bullet
+            // cam is running — otherwise clicking around menus silently spins the
+            // aim (and sway keeps drifting) behind the panels.
+            if (LookFrozen()) return;
+
             ReadLookInput();
 
             // Recoil springs back to neutral.
@@ -55,6 +60,14 @@ namespace SuperSniper8D
             float finalPitch = Mathf.Clamp(_pitch, pitchMin, pitchMax) - _recoil.y + swayY;
             float finalYaw = _yaw + _recoil.x + swayX;
             transform.localRotation = Quaternion.Euler(finalPitch, finalYaw, 0f);
+        }
+
+        bool LookFrozen()
+        {
+            if (BulletCam.Instance != null && BulletCam.Instance.IsPlaying) return true;
+            var gm = GameManager.Instance;
+            if (gm != null && gm.ui != null && gm.ui.MenusOpen) return true;
+            return false;
         }
 
         void ReadLookInput()

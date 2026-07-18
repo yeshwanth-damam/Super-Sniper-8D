@@ -58,7 +58,8 @@ That's the whole setup. One empty object, one component.
 
 ## The Bullet Cam (signature feature)
 
-On the **final kill of every mission** — or any **headshot past 200 m** — time
+On the **final kill of every mission** — or a **long-range headshot** (75 m+ in
+the current arena) — time
 collapses to 0.15×, a dedicated camera detaches and chases the round along its
 path with a slow roll, the world's sound drops to a whisper, and impact lands on
 a single white frame before sound crashes back in. Skippable after the first
