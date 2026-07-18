@@ -101,8 +101,17 @@ namespace SuperSniper8D
         {
             // Freeze player agency while the bullet cam runs the show.
             if (BulletCam.Instance != null && BulletCam.Instance.IsPlaying) return;
-            // ...and while any menu (dossier, results, garage, pause, fail) is up.
-            if (_ui != null && _ui.MenusOpen) return;
+            // While a menu is up, or outside an active mission (e.g. the beat
+            // between the final kill and the results screen), don't take input —
+            // and ease the scope state back to neutral so zoom/muffle/heartbeat
+            // can't linger into the menus.
+            bool menuUp = _ui != null && _ui.MenusOpen;
+            bool noMission = GameManager.Instance != null && !GameManager.Instance.MissionActive;
+            if (menuUp || noMission)
+            {
+                RelaxScopeState();
+                return;
+            }
 
             HandleScope();
             HandleBreath();
@@ -137,6 +146,25 @@ namespace SuperSniper8D
         }
 
         bool ReloadInput() => Input.GetKeyDown(KeyCode.R);
+
+        // Eases zoom, muffle and heartbeat back to neutral while no mission is
+        // active or a menu is up, so none of them linger into the menus.
+        void RelaxScopeState()
+        {
+            IsScoped = false;
+            if (cam != null)
+                cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, hipFOV, Time.deltaTime * aimSpeed);
+            if (_lowPass != null)
+                _lowPass.cutoffFrequency = Mathf.Lerp(_lowPass.cutoffFrequency, 22000f, Time.deltaTime * 8f);
+            if (_heartbeat != null)
+            {
+                _heartbeat.volume = Mathf.Lerp(_heartbeat.volume, 0f, Time.deltaTime * 3f);
+                _heartbeat.pitch = Mathf.Lerp(_heartbeat.pitch, 0.9f, Time.deltaTime * 3f);
+            }
+            if (_rifle != null && !_rifle.activeSelf) _rifle.SetActive(true);
+            if (_ui != null) _ui.SetScoped(false);
+            _breathHeldFor = 0f;
+        }
 
         // --- Scope ----------------------------------------------------------
 

@@ -105,6 +105,7 @@ namespace SuperSniper8D
         {
             MissionActive = false;
             Time.timeScale = 1f;
+            if (spawner != null) spawner.ClearAll(); // no leftover targets behind menus
             if (ui != null) ui.ShowHome();
         }
 
@@ -125,6 +126,8 @@ namespace SuperSniper8D
 
         public void BackToSelect()
         {
+            MissionActive = false;
+            if (spawner != null) spawner.ClearAll();
             if (ui != null) ui.ShowMissionSelect(_curRegion);
         }
 
@@ -275,12 +278,18 @@ namespace SuperSniper8D
 #endif
         }
 
-        /// <summary>Reload the scene from scratch (returns to home). Hooked to pause.</summary>
+        /// <summary>
+        /// Abandon the current mission and return home. A soft reset — no scene
+        /// reload — so it works even when the scene isn't in Build Settings yet
+        /// (the first editor run). Hooked to the pause menu's HOME button.
+        /// </summary>
         public void RestartCampaign()
         {
+            _paused = false;
             Time.timeScale = 1f;
-            UnityEngine.SceneManagement.SceneManager.LoadScene(
-                UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
+            StopAllCoroutines();  // cancel any mission/flow coroutine in flight
+            if (weapon != null) weapon.ApplyUpgrades(Profile); // fresh clip
+            GoHome();             // clears spawner + shows home
         }
 
         /// <summary>Retry the current mission. Hooked to the fail panel.</summary>

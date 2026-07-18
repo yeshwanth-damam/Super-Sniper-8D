@@ -407,7 +407,7 @@ namespace SuperSniper8D
                 .text = "PAUSED";
             MakeButton("RESUME", _pausePanel.transform, new Vector2(0, -420),
                 () => { if (GameManager.Instance != null) GameManager.Instance.TogglePause(); });
-            MakeButton("RESTART", _pausePanel.transform, new Vector2(0, -530),
+            MakeButton("HOME", _pausePanel.transform, new Vector2(0, -530),
                 () => { if (GameManager.Instance != null) GameManager.Instance.RestartCampaign(); });
             MakeButton("QUIT", _pausePanel.transform, new Vector2(0, -640),
                 () => { if (GameManager.Instance != null) GameManager.Instance.QuitGame(); });
@@ -555,6 +555,7 @@ namespace SuperSniper8D
             if (_garagePanel) _garagePanel.SetActive(false);
             if (_homePanel) _homePanel.SetActive(false);
             if (_selectPanel) _selectPanel.SetActive(false);
+            SetLetterbox(false); // results' letterbox must not linger on menus
         }
 
         // The between-mission safehouse: spend credits on the rifle upgrade tree.
@@ -682,7 +683,25 @@ namespace SuperSniper8D
             if (_crosshair) _crosshair.SetActive(!scoped);
         }
 
-        public void SetLetterbox(bool on) => StartCoroutine(LerpLetterbox(on ? 140f : 0f));
+        /// <summary>
+        /// Hides both the scope overlay and the crosshair — used by the bullet
+        /// cam so no aim UI sits over the cinematic. The weapon's HandleScope
+        /// restores the correct state on the first frame after the cam ends.
+        /// </summary>
+        public void HideAimUI()
+        {
+            if (_scopeRoot) _scopeRoot.SetActive(false);
+            if (_crosshair) _crosshair.SetActive(false);
+        }
+
+        Coroutine _letterboxCo;
+
+        public void SetLetterbox(bool on)
+        {
+            // Stop any in-flight lerp so open/close calls can't fight each other.
+            if (_letterboxCo != null) StopCoroutine(_letterboxCo);
+            _letterboxCo = StartCoroutine(LerpLetterbox(on ? 140f : 0f));
+        }
 
         IEnumerator LerpLetterbox(float target)
         {

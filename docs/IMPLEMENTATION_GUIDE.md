@@ -68,7 +68,7 @@ projects end up with ten broken half-features instead of one working game.
          flash → results screen counts up → credits shown
    - [ ] **CONTINUE** → Safehouse (buy an upgrade if affordable) → **DEPLOY** →
          contract board shows #01 CLEARED, #02 unlocked
-   - [ ] **Esc** pauses (Resume/Restart/Quit); letting the timer run out shows
+   - [ ] **Esc** pauses (Resume/Home/Quit); letting the timer run out shows
          MISSION FAILED with Retry/Abort
 5. Stop Play mode. Save the scene as `Assets/Scenes/Main.unity`.
 

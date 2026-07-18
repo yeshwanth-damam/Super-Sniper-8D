@@ -116,7 +116,11 @@ namespace SuperSniper8D
             if (dir.sqrMagnitude < 0.0001f) dir = Vector3.forward;
 
             var ui = GameManager.Instance != null ? GameManager.Instance.ui : null;
-            if (ui != null) ui.SetLetterbox(true);
+            if (ui != null)
+            {
+                ui.SetLetterbox(true);
+                ui.HideAimUI(); // no scope reticle / crosshair over the cinematic
+            }
 
             // Scale the fly-along to the shot distance so near and far kills
             // both read well, and seat the camera before the first frame so it
