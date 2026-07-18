@@ -15,7 +15,8 @@ namespace SuperSniper8D
         public int credits;
         public int[] upgradeLevels = new int[4];
         public int bestScore;
-        public int highestLevel;
+        public int highestLevel;         // legacy, unused
+        public int highestCompleted = -1; // global index of the furthest cleared contract
 
         public int GetLevel(UpgradeTrack track)
         {

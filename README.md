@@ -2,8 +2,9 @@
 
 **8x precision scope. 8D spatial audio. Feel every shot.**
 
-A complete, playable premium sniper game for Unity — 3 missions, moving targets,
-headshot scoring, a bolt-action rifle with 8x scope, breath-holding, a
+A complete, playable premium sniper game for Unity — **12 authored contracts
+across 2 regions** with a home/region map and mission-select case files, moving
+targets, headshot scoring, a bolt-action rifle with 8x scope, breath-holding, a
 **cinematic bullet cam**, impact VFX, a **filmic grade** (vignette + film grain +
 tint), procedural sound, mission dossiers, a results screen, a pause menu, and
 mobile touch controls. The entire scene (city, rooftop, first-person rifle,
@@ -42,15 +43,18 @@ That's the whole setup. One empty object, one component.
 
 ## The game
 
-- **Mission 1 — Rooftop Overwatch** — 3 static targets, 60 seconds
-- **Mission 2 — Market Drift** — 5 targets, 2 moving, 60 seconds
-- **Mission 3 — Last Light** — 7 targets, 5 fast movers, 75 seconds
-- Body shot = 50 pts, **headshot (amber sphere) = 150 pts**
-- Each mission opens with a skippable **dossier brief**; clearing it shows a
-  **results screen** with score, accuracy, headshots, best-shot distance and
-  **credits earned**, then the **Safehouse** to spend them on rifle upgrades.
-- Run out of time → the mission fails and you can retry. Clear all three →
-  campaign-complete screen.
+- From the **home / region map** you pick a region (**Old Harbour**, **Neon
+  District** — more unlock as you clear the previous one), then choose a contract
+  from the **mission-select case files** (each shows contract number, name,
+  intel, target count, time, and a CLEARED / LOCKED stamp).
+- Missions escalate from **3 static targets** up to **8 fast movers**, 55–75s.
+- Body shot = 50 pts, **headshot (amber sphere) = 150 pts** (× your Damage upgrade).
+- Each contract opens with a skippable **dossier brief**; clearing it shows a
+  **results screen** (score, accuracy, headshots, best-shot distance, credits
+  earned), then the **Safehouse** to spend credits on rifle upgrades, then back
+  to the contract board with the next mission unlocked.
+- Run out of time → the mission fails; **Retry** it or **Abort** to the board.
+- Progress (cleared contracts, credits, upgrades) is **saved** between sessions.
 
 ## The Bullet Cam (signature feature)
 
@@ -114,11 +118,12 @@ Assets/Scripts/
 ├── Targets/TargetHead.cs        ← headshot marker component
 ├── Targets/TargetMover.cs       ← patrol movement
 ├── Targets/TargetSpawner.cs     ← builds humanoid dummies from primitives per level
-├── Core/GameManager.cs          ← missions, score, timer, credits, upgrades, dossier/results/garage flow
+├── Core/GameManager.cs          ← state machine: home/select nav, missions, score, credits, upgrades
+├── Core/Campaign.cs             ← authored regions + contracts (edit here to add content)
 ├── Core/ProceduralAudio.cs      ← gunshot/hit/reload/wind/heartbeat generated in code
 ├── Core/SaveSystem.cs           ← SaveData profile + JSON load/save (persistent data path)
 ├── Core/Upgrades.cs             ← rifle upgrade tree: tracks, costs, effect curves
-└── UI/UIManager.cs              ← HUD, scope reticle, filmic grade, dossier, results, garage, pause, mobile
+└── UI/UIManager.cs              ← HUD, scope reticle, filmic grade, home, mission select, dossier, results, garage, pause, mobile
 ```
 
 ## Troubleshooting
@@ -153,7 +158,9 @@ Assets/Scripts/
 7. Ads/IAP — only after the loop is genuinely fun (see design doc, Part 4)
 8. Optional: swap the overlay grade for a real URP post-processing Volume
    (bloom, tonemapping, color-grade LUT) on URP-only builds
-9. More missions/regions and a home/region-map meta screen
+9. ~~More missions/regions and a home/region-map meta screen~~ ✓ implemented
+   (`Campaign.cs` + home / mission-select; add content by editing `Campaign.cs`)
+10. Diegetic "Intel Drop" rewarded-ad hook + season pass (design doc, Part 4)
 
 ---
 

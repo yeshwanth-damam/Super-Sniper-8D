@@ -42,13 +42,19 @@ namespace SuperSniper8D
         bool _continuePressed;
         bool _deployPressed;
 
+        GameObject _homePanel, _selectPanel;
+        readonly System.Collections.Generic.List<GameObject> _homeCards = new System.Collections.Generic.List<GameObject>();
+        readonly System.Collections.Generic.List<GameObject> _selectCards = new System.Collections.Generic.List<GameObject>();
+
         /// <summary>True when any full-screen menu is up (weapon input is gated on this).</summary>
         public bool MenusOpen =>
             (_dossier != null && _dossier.activeSelf) ||
             (_resultsPanel != null && _resultsPanel.activeSelf) ||
             (_failPanel != null && _failPanel.activeSelf) ||
             (_pausePanel != null && _pausePanel.activeSelf) ||
-            (_garagePanel != null && _garagePanel.activeSelf);
+            (_garagePanel != null && _garagePanel.activeSelf) ||
+            (_homePanel != null && _homePanel.activeSelf) ||
+            (_selectPanel != null && _selectPanel.activeSelf);
 
         GameObject _dossier;
         Text _dossierTitle, _dossierName, _dossierIntel;
@@ -108,6 +114,7 @@ namespace SuperSniper8D
             BuildFail();
             BuildPause();
             BuildGarage();
+            BuildMetaPanels();
             if (Application.isMobilePlatform || Application.platform == RuntimePlatform.Android)
                 BuildMobileControls();
 
@@ -384,6 +391,8 @@ namespace SuperSniper8D
             _failBody = Label("FBody", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -360), 34, Paper, _failPanel.transform);
             MakeButton("RETRY", _failPanel.transform, new Vector2(0, -520),
                 () => { if (GameManager.Instance != null) GameManager.Instance.RetryLevel(); });
+            MakeButton("ABORT", _failPanel.transform, new Vector2(0, -630),
+                () => { if (GameManager.Instance != null) GameManager.Instance.BackToSelect(); });
         }
 
         void BuildPause()
@@ -398,6 +407,149 @@ namespace SuperSniper8D
             MakeButton("QUIT", _pausePanel.transform, new Vector2(0, -640),
                 () => { if (GameManager.Instance != null) GameManager.Instance.QuitGame(); });
             _pausePanel.SetActive(false);
+        }
+
+        // ------------------------------------------------------------------
+        //  Home / region map + mission-select "case files"
+        // ------------------------------------------------------------------
+
+        void BuildMetaPanels()
+        {
+            _homePanel = Panel("Home", new Color(0.02f, 0.03f, 0.04f, 0.98f));
+            _homePanel.SetActive(false);
+            _selectPanel = Panel("MissionSelect", new Color(0.02f, 0.03f, 0.04f, 0.98f));
+            _selectPanel.SetActive(false);
+        }
+
+        public void ShowHome()
+        {
+            var gm = GameManager.Instance;
+            HideMenuPanels();
+            _homePanel.SetActive(true);
+            MouseLook.LockCursor(false);
+
+            foreach (var c in _homeCards) { if (c) { c.SetActive(false); Destroy(c); } }
+            _homeCards.Clear();
+
+            var titleText = Label("HTitle", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -110), 72, Amber, _homePanel.transform);
+            titleText.text = "SUPER SNIPER 8D";
+            _homeCards.Add(titleText.gameObject);
+            var sub = Label("HSub", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -200), 28, Paper, _homePanel.transform);
+            sub.text = gm != null ? $"SELECT REGION    ·    CREDITS {gm.Profile.credits:N0}" : "SELECT REGION";
+            _homeCards.Add(sub.gameObject);
+
+            if (gm == null) return;
+            float y = -300f;
+            for (int r = 0; r < gm.RegionCount; r++)
+            {
+                int region = r;
+                bool unlocked = gm.IsRegionUnlocked(r);
+                string body = $"{gm.RegionName(r)}\n{gm.RegionTagline(r)}";
+                string stamp = unlocked ? null : "LOCKED";
+                var card = MakeCard(_homePanel.transform, new Vector2(0, y), new Vector2(1000, 150), body, unlocked, stamp,
+                    () => { if (GameManager.Instance != null) GameManager.Instance.SelectRegion(region); });
+                _homeCards.Add(card);
+                y -= 180f;
+            }
+        }
+
+        public void ShowMissionSelect(int r)
+        {
+            var gm = GameManager.Instance;
+            HideMenuPanels();
+            _selectPanel.SetActive(true);
+            MouseLook.LockCursor(false);
+
+            foreach (var c in _selectCards) { if (c) { c.SetActive(false); Destroy(c); } }
+            _selectCards.Clear();
+            if (gm == null) return;
+
+            var title = Label("STitle", TextAnchor.UpperLeft, new Vector2(0, 1), new Vector2(120, -90), 48, Amber, _selectPanel.transform);
+            title.text = gm.RegionName(r);
+            _selectCards.Add(title.gameObject);
+            var cred = Label("SCred", TextAnchor.UpperRight, new Vector2(1, 1), new Vector2(-320, -95), 30, Paper, _selectPanel.transform);
+            cred.text = $"CREDITS {gm.Profile.credits:N0}";
+            _selectCards.Add(cred.gameObject);
+
+            var back = MakeButton("BACK", _selectPanel.transform, new Vector2(0, 0), () => { if (GameManager.Instance != null) GameManager.Instance.GoHome(); });
+            var brt = back.GetComponent<RectTransform>();
+            brt.anchorMin = brt.anchorMax = new Vector2(1, 1);
+            brt.pivot = new Vector2(1, 1);
+            brt.anchoredPosition = new Vector2(-120, -70);
+            brt.sizeDelta = new Vector2(170, 66);
+            _selectCards.Add(back.gameObject);
+
+            float y = -190f;
+            for (int m = 0; m < gm.MissionCount(r); m++)
+            {
+                int mission = m;
+                MissionDef def = gm.Mission(r, m);
+                bool unlocked = gm.IsMissionUnlocked(r, m);
+                bool done = gm.IsMissionCompleted(r, m);
+                int gi = gm.GlobalIndex(r, m);
+                string body = $"CONTRACT #{gi + 1:00}   {def.name}\n{def.intel}\nTARGETS {def.targets}  ·  {def.timeLimit:0}s";
+                string stamp = done ? "CLEARED" : (unlocked ? null : "LOCKED");
+                Color stampCol = done ? Amber : new Color(0.5f, 0.5f, 0.55f);
+                var card = MakeCard(_selectPanel.transform, new Vector2(0, y), new Vector2(1200, 118), body, unlocked, stamp,
+                    () => { if (GameManager.Instance != null) GameManager.Instance.SelectMission(r, mission); }, stampCol);
+                _selectCards.Add(card);
+                y -= 135f;
+            }
+        }
+
+        // A clickable multi-line card with an optional corner stamp.
+        GameObject MakeCard(Transform parent, Vector2 pos, Vector2 size, string body, bool enabled,
+            string stamp, UnityEngine.Events.UnityAction onClick, Color? stampColor = null)
+        {
+            var go = new GameObject("Card");
+            go.transform.SetParent(parent, false);
+            var img = go.AddComponent<Image>();
+            img.color = enabled ? new Color(0.10f, 0.11f, 0.13f, 0.95f) : new Color(0.06f, 0.06f, 0.07f, 0.9f);
+            var rt = img.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = size;
+
+            var outline = go.AddComponent<Outline>();
+            outline.effectColor = enabled ? Amber : new Color(0.3f, 0.3f, 0.32f);
+            outline.effectDistance = new Vector2(1, 1);
+
+            var txt = Label("CardText", TextAnchor.MiddleLeft, new Vector2(0, 0.5f), new Vector2(30, 0), 27,
+                enabled ? Paper : new Color(0.55f, 0.55f, 0.58f), go.transform);
+            txt.rectTransform.anchorMin = new Vector2(0, 0.5f);
+            txt.rectTransform.anchorMax = new Vector2(0, 0.5f);
+            txt.rectTransform.sizeDelta = new Vector2(size.x - 220, size.y - 16);
+            txt.horizontalOverflow = HorizontalWrapMode.Wrap;
+            txt.raycastTarget = false;
+            txt.text = body;
+
+            if (!string.IsNullOrEmpty(stamp))
+            {
+                var st = Label("Stamp", TextAnchor.MiddleRight, new Vector2(1, 0.5f), new Vector2(-30, 0), 30,
+                    stampColor ?? new Color(0.5f, 0.5f, 0.55f), go.transform);
+                st.rectTransform.anchorMin = new Vector2(1, 0.5f);
+                st.rectTransform.anchorMax = new Vector2(1, 0.5f);
+                st.rectTransform.sizeDelta = new Vector2(200, size.y);
+                st.raycastTarget = false;
+                st.text = stamp;
+            }
+
+            var btn = go.AddComponent<Button>();
+            btn.interactable = enabled;
+            btn.onClick.AddListener(onClick);
+            return go;
+        }
+
+        void HideMenuPanels()
+        {
+            if (_dossier) _dossier.SetActive(false);
+            if (_resultsPanel) _resultsPanel.SetActive(false);
+            if (_failPanel) _failPanel.SetActive(false);
+            if (_pausePanel) _pausePanel.SetActive(false);
+            if (_garagePanel) _garagePanel.SetActive(false);
+            if (_homePanel) _homePanel.SetActive(false);
+            if (_selectPanel) _selectPanel.SetActive(false);
         }
 
         // The between-mission safehouse: spend credits on the rifle upgrade tree.
@@ -578,8 +730,8 @@ namespace SuperSniper8D
             _dossier.SetActive(false);
         }
 
-        public IEnumerator ShowResults(int levelCleared, int score, float accuracy,
-            int headshots, float bestDistance, int creditsEarned, int totalCredits, bool isFinalLevel)
+        public IEnumerator ShowResults(int contractNo, int score, float accuracy,
+            int headshots, float bestDistance, int creditsEarned, int totalCredits, bool campaignCleared)
         {
             SetLetterbox(true);
             _resultsPanel.SetActive(true);
@@ -590,39 +742,30 @@ namespace SuperSniper8D
             while (shown < score)
             {
                 shown = Mathf.Min(score, shown + step);
-                _resultsBody.text = ResultsText(shown, accuracy, headshots, bestDistance, creditsEarned, totalCredits, isFinalLevel);
+                _resultsBody.text = ResultsText(shown, accuracy, headshots, bestDistance, creditsEarned, totalCredits, campaignCleared);
                 yield return new WaitForSecondsRealtime(0.03f);
             }
-            _resultsBody.text = ResultsText(score, accuracy, headshots, bestDistance, creditsEarned, totalCredits, isFinalLevel);
+            _resultsBody.text = ResultsText(score, accuracy, headshots, bestDistance, creditsEarned, totalCredits, campaignCleared);
 
-            // Clear any button left over from a previous level, then add ours.
+            // Clear any button left over from a previous mission, then add ours.
             foreach (Transform child in _resultsPanel.transform)
                 if (child.name.StartsWith("Btn_")) Destroy(child.gameObject);
 
             _continuePressed = false;
-            MakeButton(isFinalLevel ? "PLAY AGAIN" : "CONTINUE", _resultsPanel.transform, new Vector2(0, -600),
-                () =>
-                {
-                    if (isFinalLevel)
-                    {
-                        if (GameManager.Instance != null) GameManager.Instance.RestartCampaign();
-                    }
-                    else _continuePressed = true;
-                });
+            MakeButton("CONTINUE", _resultsPanel.transform, new Vector2(0, -600), () => _continuePressed = true);
 
             MouseLook.LockCursor(false);
-            if (isFinalLevel) yield break; // PLAY AGAIN reloads the scene
 
             // Wait for the player to acknowledge before moving on. The panel is
             // left active (the garage renders on top) so a menu is always up
-            // until the next dossier calls HidePanels — no input-gate gap.
+            // until the next screen takes over — no input-gate gap.
             while (!_continuePressed) yield return null;
         }
 
         string ResultsText(int score, float accuracy, int headshots, float bestDistance,
-            int creditsEarned, int totalCredits, bool finalLevel)
+            int creditsEarned, int totalCredits, bool campaignCleared)
         {
-            string header = finalLevel ? "CAMPAIGN CLEARED\n\n" : "";
+            string header = campaignCleared ? "CAMPAIGN CLEARED\n\n" : "";
             return $"{header}SCORE  {score:N0}\n\n" +
                    $"ACCURACY  {accuracy * 100f:0}%\n" +
                    $"HEADSHOTS  {headshots}\n" +
@@ -640,10 +783,7 @@ namespace SuperSniper8D
 
         public void HidePanels()
         {
-            if (_dossier) _dossier.SetActive(false);
-            if (_resultsPanel) _resultsPanel.SetActive(false);
-            if (_failPanel) _failPanel.SetActive(false);
-            if (_garagePanel) _garagePanel.SetActive(false);
+            HideMenuPanels();
             SetLetterbox(false);
             MouseLook.LockCursor(true);
         }

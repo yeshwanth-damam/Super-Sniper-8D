@@ -1,88 +1,55 @@
-using System;
 using System.Collections;
 using UnityEngine;
 
 namespace SuperSniper8D
 {
     /// <summary>
-    /// Owns the whole game flow: level definitions, score, timer, and the
-    /// win/lose state machine. Everything else (spawner, UI, weapon) talks to
-    /// this singleton. No Inspector wiring required — <see cref="GameBootstrap"/>
-    /// creates and connects it at runtime.
+    /// The whole game state machine: authored campaign data, the home / mission
+    /// select navigation, per-mission score/timer/flow, credits, upgrades and
+    /// save. Everything else talks to this singleton; <see cref="GameBootstrap"/>
+    /// creates and wires it at runtime with no Inspector setup.
     /// </summary>
     public class GameManager : MonoBehaviour
     {
         public static GameManager Instance { get; private set; }
 
-        /// <summary>A single mission/level, authored as data.</summary>
-        [Serializable]
+        /// <summary>Runtime spawn parameters handed to the <see cref="TargetSpawner"/>.</summary>
         public struct LevelConfig
         {
-            public string missionName;   // Shown on the dossier + HUD
-            public string intel;         // One line of flavour intel
-            public int targetCount;      // Total targets to eliminate
-            public int moverCount;       // How many of them patrol
-            public float moverSpeed;     // Patrol speed for this level
-            public float timeLimit;      // Seconds before the mission fails
+            public string missionName;
+            public string intel;
+            public int targetCount;
+            public int moverCount;
+            public float moverSpeed;
+            public float timeLimit;
         }
-
-        [Header("Levels")]
-        public LevelConfig[] levels = new LevelConfig[]
-        {
-            new LevelConfig
-            {
-                missionName = "ROOFTOP OVERWATCH",
-                intel = "TARGET: arms courier. WINDOW: 60s. COLLATERAL: zero.",
-                targetCount = 3, moverCount = 0, moverSpeed = 0f, timeLimit = 60f
-            },
-            new LevelConfig
-            {
-                missionName = "MARKET DRIFT",
-                intel = "Two runners on the move. Lead your shots.",
-                targetCount = 5, moverCount = 2, moverSpeed = 1.6f, timeLimit = 60f
-            },
-            new LevelConfig
-            {
-                missionName = "LAST LIGHT",
-                intel = "Full cell scattering. Clear the block before dark.",
-                targetCount = 7, moverCount = 5, moverSpeed = 2.4f, timeLimit = 75f
-            },
-        };
-
-        // Runtime state ------------------------------------------------------
-        public int Score { get; private set; }
-        public int LevelIndex { get; private set; }
-        public int TargetsRemaining { get; private set; }
-        public int TargetsEliminated { get; private set; }
-        public bool MissionActive { get; private set; }
-
-        public LevelConfig CurrentLevel => levels[Mathf.Clamp(LevelIndex, 0, levels.Length - 1)];
-
-        // Accuracy tracking for the results screen.
-        int _shotsFired;
-        int _shotsHit;
-        int _headshots;
-        float _bestDistance;
-        float _timeRemaining;
 
         // Collaborators (assigned by the bootstrap).
         public TargetSpawner spawner;
         public UIManager ui;
         public WeaponController weapon;
 
-        // Persistent player profile (credits + upgrades).
         public SaveData Profile { get; private set; }
 
-        public event Action<int> OnScoreChanged;
+        RegionDef[] _regions;
+        int _curRegion;
+        int _curMission;
+
+        // Runtime mission state.
+        public int Score { get; private set; }
+        public int TargetsRemaining { get; private set; }
+        public int TargetsEliminated { get; private set; }
+        public bool MissionActive { get; private set; }
+
+        int _shotsFired, _shotsHit, _headshots;
+        float _bestDistance, _timeRemaining;
+        bool _paused;
 
         void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
+            _regions = Campaign.Build();
         }
 
         void OnDestroy()
@@ -90,60 +57,204 @@ namespace SuperSniper8D
             if (Instance == this) Instance = null;
         }
 
+        // ------------------------------------------------------------------
+        //  Campaign data accessors (read by the UI)
+        // ------------------------------------------------------------------
+
+        public int RegionCount => _regions.Length;
+        public string RegionName(int r) => _regions[r].name;
+        public string RegionTagline(int r) => _regions[r].tagline;
+        public int MissionCount(int r) => _regions[r].missions.Length;
+        public MissionDef Mission(int r, int m) => _regions[r].missions[m];
+        public int CurrentRegion => _curRegion;
+
+        public int GlobalIndex(int r, int m)
+        {
+            int idx = 0;
+            for (int i = 0; i < r; i++) idx += _regions[i].missions.Length;
+            return idx + m;
+        }
+
+        public int TotalMissions()
+        {
+            int n = 0;
+            foreach (var reg in _regions) n += reg.missions.Length;
+            return n;
+        }
+
+        public bool IsMissionCompleted(int r, int m) =>
+            Profile != null && GlobalIndex(r, m) <= Profile.highestCompleted;
+
+        public bool IsMissionUnlocked(int r, int m) =>
+            Profile != null && GlobalIndex(r, m) <= Profile.highestCompleted + 1;
+
+        public bool IsRegionUnlocked(int r) => IsMissionUnlocked(r, 0);
+
+        // ------------------------------------------------------------------
+        //  Navigation (called from the bootstrap and UI buttons)
+        // ------------------------------------------------------------------
+
         public void BeginGame()
         {
             Profile = SaveSystem.Load();
             if (weapon != null) weapon.ApplyUpgrades(Profile);
-
-            Score = 0;
-            LevelIndex = 0;
-            StartCoroutine(StartLevelRoutine(0));
+            GoHome();
         }
 
-        IEnumerator StartLevelRoutine(int index)
+        public void GoHome()
         {
-            LevelIndex = Mathf.Clamp(index, 0, levels.Length - 1);
-            LevelConfig cfg = CurrentLevel;
+            MissionActive = false;
+            Time.timeScale = 1f;
+            if (ui != null) ui.ShowHome();
+        }
+
+        public void SelectRegion(int r)
+        {
+            if (!IsRegionUnlocked(r)) return;
+            _curRegion = r;
+            if (ui != null) ui.ShowMissionSelect(r);
+        }
+
+        public void SelectMission(int r, int m)
+        {
+            if (!IsMissionUnlocked(r, m)) return;
+            _curRegion = r;
+            _curMission = m;
+            StartCoroutine(StartMissionRoutine(r, m));
+        }
+
+        public void BackToSelect()
+        {
+            if (ui != null) ui.ShowMissionSelect(_curRegion);
+        }
+
+        MissionDef CurMission => _regions[_curRegion].missions[_curMission];
+
+        LevelConfig ToConfig(MissionDef d) => new LevelConfig
+        {
+            missionName = d.name,
+            intel = d.intel,
+            targetCount = d.targets,
+            moverCount = d.movers,
+            moverSpeed = d.moverSpeed,
+            timeLimit = d.timeLimit,
+        };
+
+        IEnumerator StartMissionRoutine(int r, int m)
+        {
+            MissionDef def = _regions[r].missions[m];
 
             MissionActive = false;
+            Score = 0;
             TargetsEliminated = 0;
-            _timeRemaining = cfg.timeLimit;
-
-            // Per-mission accuracy stats reset each level.
             _shotsFired = 0;
             _shotsHit = 0;
             _headshots = 0;
             _bestDistance = 0f;
+            _timeRemaining = def.timeLimit;
 
-            // Show the cinematic dossier before the mission goes live.
             if (ui != null)
-                yield return ui.PlayDossier(LevelIndex + 1, cfg.missionName, cfg.intel);
+                yield return ui.PlayDossier(GlobalIndex(r, m) + 1, def.name, def.intel);
 
-            TargetsRemaining = spawner != null ? spawner.BuildLevel(cfg) : cfg.targetCount;
+            TargetsRemaining = spawner != null ? spawner.BuildLevel(ToConfig(def)) : def.targets;
 
             MissionActive = true;
-            if (ui != null) ui.SetMission(cfg.missionName, TargetsEliminated, cfg.targetCount);
+            if (ui != null)
+            {
+                ui.SetScore(Score);
+                ui.SetMission(def.name, TargetsEliminated, def.targets);
+            }
         }
 
-        bool _paused;
+        // ------------------------------------------------------------------
+        //  Mission runtime
+        // ------------------------------------------------------------------
 
         void Update()
         {
             if (Input.GetKeyDown(KeyCode.Escape)) TogglePause();
             if (_paused) return;
             if (!MissionActive) return;
-
-            // Freeze the clock while the bullet cam runs the show.
             if (BulletCam.Instance != null && BulletCam.Instance.IsPlaying) return;
 
             _timeRemaining -= Time.deltaTime;
             if (ui != null) ui.SetTimer(Mathf.Max(0f, _timeRemaining));
-
-            if (_timeRemaining <= 0f)
-                FailMission();
+            if (_timeRemaining <= 0f) FailMission();
         }
 
-        /// <summary>Esc toggles a pause menu during an active mission.</summary>
+        public void RegisterShot(bool hit)
+        {
+            _shotsFired++;
+            if (hit) _shotsHit++;
+        }
+
+        public void RegisterKill(int points, bool headshot, float distance)
+        {
+            Score += points;
+            TargetsEliminated++;
+            TargetsRemaining = Mathf.Max(0, TargetsRemaining - 1);
+            if (headshot) _headshots++;
+            if (distance > _bestDistance) _bestDistance = distance;
+
+            if (ui != null)
+            {
+                ui.SetScore(Score);
+                ui.SetMission(CurMission.name, TargetsEliminated, CurMission.targets);
+            }
+
+            if (TargetsRemaining <= 0)
+                StartCoroutine(CompleteMissionRoutine());
+        }
+
+        public bool IsFinalTarget => MissionActive && TargetsRemaining <= 1;
+
+        IEnumerator CompleteMissionRoutine()
+        {
+            MissionActive = false;
+            yield return null;
+            while (BulletCam.Instance != null && BulletCam.Instance.IsPlaying)
+                yield return null;
+            yield return new WaitForSecondsRealtime(1.4f);
+
+            int creditsEarned = 50 + _shotsHit * 25 + _headshots * 20;
+            int gi = GlobalIndex(_curRegion, _curMission);
+            if (Profile != null)
+            {
+                Profile.credits += creditsEarned;
+                if (Score > Profile.bestScore) Profile.bestScore = Score;
+                if (gi > Profile.highestCompleted) Profile.highestCompleted = gi;
+                SaveSystem.Save(Profile);
+            }
+
+            bool campaignCleared = gi >= TotalMissions() - 1;
+            if (ui != null)
+            {
+                yield return ui.ShowResults(
+                    contractNo: gi + 1,
+                    score: Score,
+                    accuracy: _shotsFired > 0 ? (float)_shotsHit / _shotsFired : 0f,
+                    headshots: _headshots,
+                    bestDistance: _bestDistance,
+                    creditsEarned: creditsEarned,
+                    totalCredits: Profile != null ? Profile.credits : 0,
+                    campaignCleared: campaignCleared);
+
+                // Spend credits, then back to the contract board.
+                yield return ui.ShowGarage(Profile);
+                ui.ShowMissionSelect(_curRegion);
+            }
+        }
+
+        void FailMission()
+        {
+            MissionActive = false;
+            if (ui != null) ui.ShowFailed(CurMission.name);
+        }
+
+        // ------------------------------------------------------------------
+        //  Pause / lifecycle / economy
+        // ------------------------------------------------------------------
+
         public void TogglePause()
         {
             if (BulletCam.Instance != null && BulletCam.Instance.IsPlaying) return;
@@ -164,79 +275,19 @@ namespace SuperSniper8D
 #endif
         }
 
-        /// <summary>Called by the weapon whenever the trigger is pulled.</summary>
-        public void RegisterShot(bool hit)
+        /// <summary>Reload the scene from scratch (returns to home). Hooked to pause.</summary>
+        public void RestartCampaign()
         {
-            _shotsFired++;
-            if (hit) _shotsHit++;
+            Time.timeScale = 1f;
+            UnityEngine.SceneManagement.SceneManager.LoadScene(
+                UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
         }
 
-        /// <summary>Called when a target is confirmed down.</summary>
-        public void RegisterKill(int points, bool headshot, float distance)
+        /// <summary>Retry the current mission. Hooked to the fail panel.</summary>
+        public void RetryLevel()
         {
-            Score += points;
-            TargetsEliminated++;
-            TargetsRemaining = Mathf.Max(0, TargetsRemaining - 1);
-            if (headshot) _headshots++;
-            if (distance > _bestDistance) _bestDistance = distance;
-
-            OnScoreChanged?.Invoke(Score);
-            if (ui != null)
-            {
-                ui.SetScore(Score);
-                ui.SetMission(CurrentLevel.missionName, TargetsEliminated, CurrentLevel.targetCount);
-            }
-
-            if (TargetsRemaining <= 0)
-                StartCoroutine(CompleteLevelRoutine());
-        }
-
-        /// <summary>True when only one target is left — used to trigger the bullet cam.</summary>
-        public bool IsFinalTarget => MissionActive && TargetsRemaining <= 1;
-
-        IEnumerator CompleteLevelRoutine()
-        {
-            MissionActive = false;
-            // Let the final bullet cam finish, then let the knockback breathe.
-            yield return null;
-            while (BulletCam.Instance != null && BulletCam.Instance.IsPlaying)
-                yield return null;
-            yield return new WaitForSecondsRealtime(1.4f);
-
-            // Award credits and persist the profile.
-            int creditsEarned = 50 + _shotsHit * 25 + _headshots * 20;
-            if (Profile != null)
-            {
-                Profile.credits += creditsEarned;
-                if (Score > Profile.bestScore) Profile.bestScore = Score;
-                if (LevelIndex + 1 > Profile.highestLevel) Profile.highestLevel = LevelIndex + 1;
-                SaveSystem.Save(Profile);
-            }
-
-            bool lastLevel = LevelIndex >= levels.Length - 1;
-            if (ui != null)
-            {
-                yield return ui.ShowResults(
-                    levelCleared: LevelIndex + 1,
-                    score: Score,
-                    accuracy: _shotsFired > 0 ? (float)_shotsHit / _shotsFired : 0f,
-                    headshots: _headshots,
-                    bestDistance: _bestDistance,
-                    creditsEarned: creditsEarned,
-                    totalCredits: Profile != null ? Profile.credits : 0,
-                    isFinalLevel: lastLevel);
-            }
-
-            if (lastLevel)
-            {
-                // Campaign complete — the UI results screen offers a restart.
-                yield break;
-            }
-
-            // Between missions: the safehouse/garage to spend credits.
-            if (ui != null) yield return ui.ShowGarage(Profile);
-
-            StartCoroutine(StartLevelRoutine(LevelIndex + 1));
+            if (ui != null) ui.HidePanels();
+            StartCoroutine(StartMissionRoutine(_curRegion, _curMission));
         }
 
         /// <summary>Buy the next level of a track. Returns true on success.</summary>
@@ -252,27 +303,6 @@ namespace SuperSniper8D
             if (weapon != null) weapon.ApplyUpgrades(Profile);
             SaveSystem.Save(Profile);
             return true;
-        }
-
-        void FailMission()
-        {
-            MissionActive = false;
-            if (ui != null) ui.ShowFailed(CurrentLevel.missionName);
-        }
-
-        /// <summary>Reload the whole run from level one. Hooked to UI buttons.</summary>
-        public void RestartCampaign()
-        {
-            Time.timeScale = 1f;
-            UnityEngine.SceneManagement.SceneManager.LoadScene(
-                UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
-        }
-
-        /// <summary>Retry just the current level. Hooked to the fail panel.</summary>
-        public void RetryLevel()
-        {
-            if (ui != null) ui.HidePanels();
-            StartCoroutine(StartLevelRoutine(LevelIndex));
         }
     }
 }
