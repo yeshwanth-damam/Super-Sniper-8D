@@ -14,6 +14,11 @@ aspect-correct on any screen ratio.
 
 ---
 
+> **Building this to a full release?** Follow the step-by-step
+> [Implementation Guide](docs/IMPLEMENTATION_GUIDE.md) — from a fresh machine
+> to Google Play launch, in order, with checkpoints. The quick setup below gets
+> the game running in 5 minutes.
+
 ## Setup (5 minutes)
 
 1. Install **Unity Hub**, then **Unity 6 LTS** (add the *Android Build Support*
