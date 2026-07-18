@@ -68,6 +68,10 @@ namespace SuperSniper8D
         // Collaborators (assigned by the bootstrap).
         public TargetSpawner spawner;
         public UIManager ui;
+        public WeaponController weapon;
+
+        // Persistent player profile (credits + upgrades).
+        public SaveData Profile { get; private set; }
 
         public event Action<int> OnScoreChanged;
 
@@ -88,6 +92,9 @@ namespace SuperSniper8D
 
         public void BeginGame()
         {
+            Profile = SaveSystem.Load();
+            if (weapon != null) weapon.ApplyUpgrades(Profile);
+
             Score = 0;
             LevelIndex = 0;
             StartCoroutine(StartLevelRoutine(0));
@@ -101,6 +108,12 @@ namespace SuperSniper8D
             MissionActive = false;
             TargetsEliminated = 0;
             _timeRemaining = cfg.timeLimit;
+
+            // Per-mission accuracy stats reset each level.
+            _shotsFired = 0;
+            _shotsHit = 0;
+            _headshots = 0;
+            _bestDistance = 0f;
 
             // Show the cinematic dossier before the mission goes live.
             if (ui != null)
@@ -190,6 +203,16 @@ namespace SuperSniper8D
                 yield return null;
             yield return new WaitForSecondsRealtime(1.4f);
 
+            // Award credits and persist the profile.
+            int creditsEarned = 50 + _shotsHit * 25 + _headshots * 20;
+            if (Profile != null)
+            {
+                Profile.credits += creditsEarned;
+                if (Score > Profile.bestScore) Profile.bestScore = Score;
+                if (LevelIndex + 1 > Profile.highestLevel) Profile.highestLevel = LevelIndex + 1;
+                SaveSystem.Save(Profile);
+            }
+
             bool lastLevel = LevelIndex >= levels.Length - 1;
             if (ui != null)
             {
@@ -199,6 +222,8 @@ namespace SuperSniper8D
                     accuracy: _shotsFired > 0 ? (float)_shotsHit / _shotsFired : 0f,
                     headshots: _headshots,
                     bestDistance: _bestDistance,
+                    creditsEarned: creditsEarned,
+                    totalCredits: Profile != null ? Profile.credits : 0,
                     isFinalLevel: lastLevel);
             }
 
@@ -208,7 +233,25 @@ namespace SuperSniper8D
                 yield break;
             }
 
+            // Between missions: the safehouse/garage to spend credits.
+            if (ui != null) yield return ui.ShowGarage(Profile);
+
             StartCoroutine(StartLevelRoutine(LevelIndex + 1));
+        }
+
+        /// <summary>Buy the next level of a track. Returns true on success.</summary>
+        public bool TryBuyUpgrade(UpgradeTrack track)
+        {
+            if (Profile == null) return false;
+            int level = Profile.GetLevel(track);
+            int cost = Upgrades.NextCost(track, level);
+            if (cost < 0 || Profile.credits < cost) return false;
+
+            Profile.credits -= cost;
+            Profile.SetLevel(track, level + 1);
+            if (weapon != null) weapon.ApplyUpgrades(Profile);
+            SaveSystem.Save(Profile);
+            return true;
         }
 
         void FailMission()

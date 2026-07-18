@@ -48,6 +48,7 @@ namespace SuperSniper8D
             GameManager gm = new GameObject("GameManager").AddComponent<GameManager>();
             gm.spawner = spawner;
             gm.ui = ui;
+            gm.weapon = cam.GetComponent<WeaponController>();
 
             // Ambient wind beds placed around the nest for positional "8D" audio.
             audio.SpawnWindBed(nestPosition + Vector3.left * 8f, 0.4f);

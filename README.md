@@ -47,7 +47,8 @@ That's the whole setup. One empty object, one component.
 - **Mission 3 — Last Light** — 7 targets, 5 fast movers, 75 seconds
 - Body shot = 50 pts, **headshot (amber sphere) = 150 pts**
 - Each mission opens with a skippable **dossier brief**; clearing it shows a
-  **results screen** with score, accuracy, headshots and best-shot distance.
+  **results screen** with score, accuracy, headshots, best-shot distance and
+  **credits earned**, then the **Safehouse** to spend them on rifle upgrades.
 - Run out of time → the mission fails and you can retry. Clear all three →
   campaign-complete screen.
 
@@ -59,6 +60,24 @@ path with a slow roll, the world's sound drops to a whisper, and impact lands on
 a single white frame before sound crashes back in. Skippable after the first
 viewing (click / Space / tap). This is the shareable moment the whole design
 hangs on; see `docs/SuperSniper8D_Design_Monetization.md`.
+
+## Progression — credits, upgrades & save
+
+Clearing a mission awards **credits** (base + hits + headshots). Between
+missions you drop into the **Safehouse**, a garage screen where you spend
+credits on a four-track rifle upgrade tree:
+
+| Track | Effect (Lv 0 → 5) |
+|-------|-------------------|
+| **Damage** | score multiplier ×1.00 → ×1.40 (more score = more credits) |
+| **Stability** | up to 60% less sway |
+| **Zoom** | scope magnification 8× → 13× |
+| **Clip** | magazine 5 → 10 rounds |
+
+Credits and upgrade levels **persist across sessions** as JSON in the platform's
+persistent data path (`SaveSystem.cs`) — corrupt or missing saves fall back to a
+fresh profile, so it never breaks. Upgrades apply to the rifle immediately on
+purchase.
 
 ## The cinematic look
 
@@ -89,15 +108,17 @@ overlay stays out of its way.
 Assets/Scripts/
 ├── Bootstrap/GameBootstrap.cs   ← builds the whole scene; the only thing you add
 ├── Player/MouseLook.cs          ← mouse + touch look, sway/recoil compositing
-├── Player/WeaponController.cs   ← fire, 8x scope, ammo, reload, recoil, tracer, breath
+├── Player/WeaponController.cs   ← fire, 8x scope, ammo, reload, recoil, tracer, breath, rifle, upgrades
 ├── Player/BulletCam.cs          ← cinematic slow-mo chase cam on the final kill
-├── Targets/Target.cs            ← takes hits, physics knockback, reports kills
+├── Targets/Target.cs            ← takes hits, impact VFX, physics knockback, reports kills
 ├── Targets/TargetHead.cs        ← headshot marker component
 ├── Targets/TargetMover.cs       ← patrol movement
 ├── Targets/TargetSpawner.cs     ← builds humanoid dummies from primitives per level
-├── Core/GameManager.cs          ← missions, score, timer, dossier/results flow
+├── Core/GameManager.cs          ← missions, score, timer, credits, upgrades, dossier/results/garage flow
 ├── Core/ProceduralAudio.cs      ← gunshot/hit/reload/wind/heartbeat generated in code
-└── UI/UIManager.cs              ← full HUD, scope reticle, dossier, results, mobile buttons
+├── Core/SaveSystem.cs           ← SaveData profile + JSON load/save (persistent data path)
+├── Core/Upgrades.cs             ← rifle upgrade tree: tracks, costs, effect curves
+└── UI/UIManager.cs              ← HUD, scope reticle, filmic grade, dossier, results, garage, pause, mobile
 ```
 
 ## Troubleshooting
@@ -127,11 +148,12 @@ Assets/Scripts/
 2. Replace primitive art: free rifle + Mixamo character models
 3. ~~Bullet-cam slow-mo on the final kill~~ ✓ implemented (`BulletCam.cs`)
 4. More mission types (timed, VIP protect, hostage no-fly zones)
-5. Weapon upgrade shop (damage/zoom/stability) — the Sniper 3D core loop
+5. ~~Weapon upgrade shop (damage/zoom/stability) — the Sniper 3D core loop~~ ✓ implemented (`Upgrades.cs` + Safehouse)
 6. Steam Audio for true binaural 8D sound
 7. Ads/IAP — only after the loop is genuinely fun (see design doc, Part 4)
 8. Optional: swap the overlay grade for a real URP post-processing Volume
    (bloom, tonemapping, color-grade LUT) on URP-only builds
+9. More missions/regions and a home/region-map meta screen
 
 ---
 

@@ -34,6 +34,22 @@ namespace SuperSniper8D
 
         GameObject _pausePanel;
 
+        GameObject _garagePanel;
+        Text _garageCredits;
+        readonly Text[] _garageRowLabel = new Text[4];
+        readonly Button[] _garageBuyBtn = new Button[4];
+        readonly Text[] _garageBuyLabel = new Text[4];
+        bool _continuePressed;
+        bool _deployPressed;
+
+        /// <summary>True when any full-screen menu is up (weapon input is gated on this).</summary>
+        public bool MenusOpen =>
+            (_dossier != null && _dossier.activeSelf) ||
+            (_resultsPanel != null && _resultsPanel.activeSelf) ||
+            (_failPanel != null && _failPanel.activeSelf) ||
+            (_pausePanel != null && _pausePanel.activeSelf) ||
+            (_garagePanel != null && _garagePanel.activeSelf);
+
         GameObject _dossier;
         Text _dossierTitle, _dossierName, _dossierIntel;
 
@@ -91,6 +107,7 @@ namespace SuperSniper8D
             BuildResults();
             BuildFail();
             BuildPause();
+            BuildGarage();
             if (Application.isMobilePlatform || Application.platform == RuntimePlatform.Android)
                 BuildMobileControls();
 
@@ -383,6 +400,76 @@ namespace SuperSniper8D
             _pausePanel.SetActive(false);
         }
 
+        // The between-mission safehouse: spend credits on the rifle upgrade tree.
+        void BuildGarage()
+        {
+            _garagePanel = Panel("Garage", new Color(0.02f, 0.02f, 0.03f, 0.96f));
+            Label("GTitle", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -140), 56, Amber, _garagePanel.transform)
+                .text = "SAFEHOUSE";
+            _garageCredits = Label("GCredits", TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -215), 34, Paper, _garagePanel.transform);
+
+            float y = -320f;
+            for (int i = 0; i < 4; i++)
+            {
+                var track = (UpgradeTrack)i;
+
+                _garageRowLabel[i] = Label("GRow" + i, TextAnchor.MiddleLeft, new Vector2(0.5f, 1), new Vector2(-320, y), 30, Paper, _garagePanel.transform);
+                _garageRowLabel[i].rectTransform.sizeDelta = new Vector2(560, 80);
+
+                var btn = MakeButton(track.ToString(), _garagePanel.transform, new Vector2(360, y), () => { });
+                var brt = btn.GetComponent<RectTransform>();
+                brt.anchorMin = brt.anchorMax = new Vector2(0.5f, 1f);
+                brt.pivot = new Vector2(0.5f, 1f);
+                brt.anchoredPosition = new Vector2(360, y);
+                brt.sizeDelta = new Vector2(240, 76);
+                // Rebind the click to buy this specific track.
+                UpgradeTrack captured = track;
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(() =>
+                {
+                    if (GameManager.Instance != null && GameManager.Instance.TryBuyUpgrade(captured))
+                        RefreshGarage(GameManager.Instance.Profile);
+                });
+                _garageBuyBtn[i] = btn;
+                _garageBuyLabel[i] = btn.GetComponentInChildren<Text>();
+
+                y -= 100f;
+            }
+
+            MakeButton("DEPLOY", _garagePanel.transform, new Vector2(0, y - 40f), () => _deployPressed = true);
+            _garagePanel.SetActive(false);
+        }
+
+        void RefreshGarage(SaveData profile)
+        {
+            if (profile == null) return;
+            if (_garageCredits != null) _garageCredits.text = $"CREDITS  {profile.credits:N0}";
+
+            for (int i = 0; i < 4; i++)
+            {
+                var track = (UpgradeTrack)i;
+                int lvl = profile.GetLevel(track);
+                if (_garageRowLabel[i] != null)
+                    _garageRowLabel[i].text = $"{Upgrades.Names[i]}   Lv {lvl}/{Upgrades.MaxLevel}   ·   {Upgrades.EffectLabel(track, lvl)}";
+
+                int cost = Upgrades.NextCost(track, lvl);
+                if (_garageBuyLabel[i] != null)
+                    _garageBuyLabel[i].text = cost < 0 ? "MAX" : $"{cost} cr";
+                if (_garageBuyBtn[i] != null)
+                    _garageBuyBtn[i].interactable = cost >= 0 && profile.credits >= cost;
+            }
+        }
+
+        public IEnumerator ShowGarage(SaveData profile)
+        {
+            _deployPressed = false;
+            _garagePanel.SetActive(true);
+            RefreshGarage(profile);
+            MouseLook.LockCursor(false);
+            while (!_deployPressed) yield return null;
+            _garagePanel.SetActive(false);
+        }
+
         public void ShowPause()
         {
             if (_pausePanel != null) _pausePanel.SetActive(true);
@@ -492,7 +579,7 @@ namespace SuperSniper8D
         }
 
         public IEnumerator ShowResults(int levelCleared, int score, float accuracy,
-            int headshots, float bestDistance, bool isFinalLevel)
+            int headshots, float bestDistance, int creditsEarned, int totalCredits, bool isFinalLevel)
         {
             SetLetterbox(true);
             _resultsPanel.SetActive(true);
@@ -503,33 +590,45 @@ namespace SuperSniper8D
             while (shown < score)
             {
                 shown = Mathf.Min(score, shown + step);
-                _resultsBody.text = ResultsText(shown, accuracy, headshots, bestDistance, isFinalLevel);
+                _resultsBody.text = ResultsText(shown, accuracy, headshots, bestDistance, creditsEarned, totalCredits, isFinalLevel);
                 yield return new WaitForSecondsRealtime(0.03f);
             }
-            _resultsBody.text = ResultsText(score, accuracy, headshots, bestDistance, isFinalLevel);
+            _resultsBody.text = ResultsText(score, accuracy, headshots, bestDistance, creditsEarned, totalCredits, isFinalLevel);
 
             // Clear any button left over from a previous level, then add ours.
             foreach (Transform child in _resultsPanel.transform)
                 if (child.name.StartsWith("Btn_")) Destroy(child.gameObject);
 
-            MakeButton(isFinalLevel ? "PLAY AGAIN" : "CONTINUE", _resultsPanel.transform, new Vector2(0, -560),
+            _continuePressed = false;
+            MakeButton(isFinalLevel ? "PLAY AGAIN" : "CONTINUE", _resultsPanel.transform, new Vector2(0, -600),
                 () =>
                 {
-                    if (GameManager.Instance == null) return;
-                    if (isFinalLevel) GameManager.Instance.RestartCampaign();
-                    else { HidePanels(); SetLetterbox(false); }
+                    if (isFinalLevel)
+                    {
+                        if (GameManager.Instance != null) GameManager.Instance.RestartCampaign();
+                    }
+                    else _continuePressed = true;
                 });
 
-            if (isFinalLevel) MouseLook.LockCursor(false);
+            MouseLook.LockCursor(false);
+            if (isFinalLevel) yield break; // PLAY AGAIN reloads the scene
+
+            // Wait for the player to acknowledge before moving on. The panel is
+            // left active (the garage renders on top) so a menu is always up
+            // until the next dossier calls HidePanels — no input-gate gap.
+            while (!_continuePressed) yield return null;
         }
 
-        string ResultsText(int score, float accuracy, int headshots, float bestDistance, bool finalLevel)
+        string ResultsText(int score, float accuracy, int headshots, float bestDistance,
+            int creditsEarned, int totalCredits, bool finalLevel)
         {
             string header = finalLevel ? "CAMPAIGN CLEARED\n\n" : "";
             return $"{header}SCORE  {score:N0}\n\n" +
                    $"ACCURACY  {accuracy * 100f:0}%\n" +
                    $"HEADSHOTS  {headshots}\n" +
-                   $"BEST SHOT  {bestDistance:0} m";
+                   $"BEST SHOT  {bestDistance:0} m\n\n" +
+                   $"CREDITS EARNED  +{creditsEarned:N0}\n" +
+                   $"BALANCE  {totalCredits:N0}";
         }
 
         public void ShowFailed(string mission)
@@ -544,6 +643,8 @@ namespace SuperSniper8D
             if (_dossier) _dossier.SetActive(false);
             if (_resultsPanel) _resultsPanel.SetActive(false);
             if (_failPanel) _failPanel.SetActive(false);
+            if (_garagePanel) _garagePanel.SetActive(false);
+            SetLetterbox(false);
             MouseLook.LockCursor(true);
         }
 

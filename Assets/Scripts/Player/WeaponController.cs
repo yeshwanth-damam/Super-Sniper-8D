@@ -45,10 +45,24 @@ namespace SuperSniper8D
         float _targetFOV;
         float _breathHeldFor;
         bool _busy; // reloading or cycling the bolt
+        float _scoreMul = 1f;      // Damage upgrade
+        float _stabilityMul = 1f;  // Stability upgrade
 
         public void Init(UIManager ui)
         {
             _ui = ui;
+        }
+
+        /// <summary>Applies the persistent upgrade tree to the rifle's stats.</summary>
+        public void ApplyUpgrades(SaveData p)
+        {
+            if (p == null) return;
+            scopeMultiplier = Upgrades.ScopeMultiplier(p.GetLevel(UpgradeTrack.Zoom));
+            clipSize = Upgrades.ClipSize(p.GetLevel(UpgradeTrack.Clip));
+            _stabilityMul = Upgrades.SwayMultiplier(p.GetLevel(UpgradeTrack.Stability));
+            _scoreMul = Upgrades.ScoreMultiplier(p.GetLevel(UpgradeTrack.Damage));
+            Ammo = clipSize;
+            if (_ui != null) _ui.SetAmmo(Ammo, clipSize);
         }
 
         void Awake()
@@ -80,6 +94,8 @@ namespace SuperSniper8D
         {
             // Freeze player agency while the bullet cam runs the show.
             if (BulletCam.Instance != null && BulletCam.Instance.IsPlaying) return;
+            // ...and while any menu (dossier, results, garage, pause, fail) is up.
+            if (_ui != null && _ui.MenusOpen) return;
 
             HandleScope();
             HandleBreath();
@@ -138,7 +154,7 @@ namespace SuperSniper8D
         void HandleBreath()
         {
             bool holding = BreathInput();
-            float baseSway = IsScoped ? scopedSway : hipSway;
+            float baseSway = (IsScoped ? scopedSway : hipSway) * _stabilityMul;
 
             if (holding)
             {
@@ -205,6 +221,7 @@ namespace SuperSniper8D
                 bool isFinal = GameManager.Instance != null && GameManager.Instance.IsFinalTarget;
 
                 int points = target.TakeHit(hit.point, ray.direction, headshot);
+                points = Mathf.RoundToInt(points * _scoreMul);
                 if (GameManager.Instance != null)
                     GameManager.Instance.RegisterKill(points, headshot, distance);
 
